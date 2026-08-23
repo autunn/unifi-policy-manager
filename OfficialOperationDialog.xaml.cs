@@ -31,6 +31,20 @@ public partial class OfficialOperationDialog : Window
 
     private void BuildFields(OfficialResourceItem? selectedItem)
     {
+        JsonElement? selectedRoot = null;
+        if (selectedItem is not null)
+        {
+            try
+            {
+                using var selectedDocument = JsonDocument.Parse(selectedItem.RawJson);
+                selectedRoot = selectedDocument.RootElement.Clone();
+            }
+            catch (JsonException)
+            {
+                selectedRoot = null;
+            }
+        }
+
         foreach (var parameter in _operation.PathParameters)
         {
             var useSelection = selectedItem is not null && parameter.EndsWith("Id", StringComparison.OrdinalIgnoreCase)
@@ -50,7 +64,7 @@ public partial class OfficialOperationDialog : Window
         if (_operation.HasBody && !string.IsNullOrWhiteSpace(_operation.DefaultBody))
         {
             using var document = JsonDocument.Parse(_operation.DefaultBody);
-            FlattenBody(document.RootElement, "", _fields);
+            FlattenBody(document.RootElement, "", _fields, selectedRoot);
         }
 
         if (_fields.Count == 0)
@@ -97,7 +111,11 @@ public partial class OfficialOperationDialog : Window
         }
     }
 
-    private static void FlattenBody(JsonElement element, string prefix, ICollection<OperationFieldRow> fields)
+    private static void FlattenBody(
+        JsonElement element,
+        string prefix,
+        ICollection<OperationFieldRow> fields,
+        JsonElement? selectedRoot)
     {
         if (element.ValueKind != JsonValueKind.Object) return;
         foreach (var property in element.EnumerateObject())
@@ -105,21 +123,43 @@ public partial class OfficialOperationDialog : Window
             var path = string.IsNullOrWhiteSpace(prefix) ? property.Name : $"{prefix}.{property.Name}";
             if (property.Value.ValueKind == JsonValueKind.Object)
             {
-                FlattenBody(property.Value, path, fields);
+                FlattenBody(property.Value, path, fields, selectedRoot);
                 continue;
             }
             var kind = property.Value.ValueKind.ToString();
-            var value = property.Value.ValueKind switch
+            var source = selectedRoot is JsonElement root && TryGetPathValue(root, path, out var selectedValue)
+                ? selectedValue
+                : property.Value;
+            var value = source.ValueKind switch
             {
-                JsonValueKind.String => property.Value.GetString() ?? "",
-                JsonValueKind.Number => property.Value.GetRawText(),
+                JsonValueKind.String => source.GetString() ?? "",
+                JsonValueKind.Number => source.GetRawText(),
                 JsonValueKind.True => "true",
                 JsonValueKind.False => "false",
-                JsonValueKind.Array => FormatArrayValue(property.Value),
+                JsonValueKind.Array => FormatArrayValue(source),
                 _ => ""
             };
             fields.Add(new OperationFieldRow("参数", path, FriendlyLabel(path), value, false, HintForKind(kind), kind));
         }
+    }
+
+    private static bool TryGetPathValue(JsonElement root, string path, out JsonElement value)
+    {
+        value = root;
+        foreach (var segment in path.Split('.'))
+        {
+            if (value.ValueKind != JsonValueKind.Object) return false;
+            var found = false;
+            foreach (var property in value.EnumerateObject())
+            {
+                if (!property.Name.Equals(segment, StringComparison.OrdinalIgnoreCase)) continue;
+                value = property.Value;
+                found = true;
+                break;
+            }
+            if (!found) return false;
+        }
+        return value.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined or JsonValueKind.Object);
     }
 
     private static JsonNode? ParseNodeValue(OperationFieldRow field)

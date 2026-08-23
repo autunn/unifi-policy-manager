@@ -61,6 +61,41 @@ final class FeatureParityTests: XCTestCase {
         XCTAssertFalse(snapshot.distributions.isEmpty)
     }
 
+    func testOfficialResourcePagingHealthAndContextActions() throws {
+        let pageOne = try OfficialResourcePresenter.parse(
+            #"{"data":[{"code":"CN","name":"China"},{"code":"US","name":"United States"}],"totalCount":3}"#,
+            moduleID: "resources"
+        )
+        let pageTwo = try OfficialResourcePresenter.parse(
+            #"{"data":[{"code":"US","name":"United States"},{"code":"JP","name":"Japan"}],"totalCount":3}"#,
+            moduleID: "resources"
+        )
+        let merged = OfficialResourceInteraction.mergePages([pageOne, pageTwo])
+        XCTAssertEqual(merged.items.count, 3)
+        XCTAssertEqual(merged.totalCount, 3)
+        XCTAssertFalse(merged.hasHealthData)
+        XCTAssertEqual(merged.healthyCount, 0)
+        XCTAssertEqual(merged.attentionCount, 0)
+        XCTAssertEqual(merged.unknownCount, 0)
+
+        let networkList = try XCTUnwrap(OfficialAPICatalog.operations.first { $0.id == "getNetworksOverviewPage" })
+        let networkOperations = OfficialAPICatalog.operations(for: "networks")
+        XCTAssertEqual(OfficialResourceInteraction.primaryOperation(for: networkList, operations: networkOperations)?.id, "createNetwork")
+        let itemActionIDs = Set(OfficialResourceInteraction.itemOperations(for: networkList, operations: networkOperations).map(\.id))
+        XCTAssertTrue(Set(["getNetworkDetails", "updateNetwork", "deleteNetwork", "getNetworkReferences"]).isSubset(of: itemActionIDs))
+        XCTAssertEqual(OfficialResourceInteraction.detailOperation(for: networkList, operations: networkOperations)?.id, "getNetworkDetails")
+
+        let countryList = try XCTUnwrap(OfficialAPICatalog.operations.first { $0.id == "getCountries" })
+        XCTAssertTrue(OfficialResourceInteraction.itemOperations(for: countryList, operations: OfficialAPICatalog.operations(for: "resources")).isEmpty)
+        let pendingList = try XCTUnwrap(OfficialAPICatalog.operations.first { $0.id == "getPendingDevicePage" })
+        XCTAssertEqual(OfficialResourceInteraction.itemOperations(for: pendingList, operations: OfficialAPICatalog.operations(for: "devices")).map(\.id), ["adoptDevice"])
+
+        let pageQuery = OfficialResourceInteraction.pageQuery("offset=0&limit=50&filter=active", offset: 100, limit: 50)
+        XCTAssertTrue(pageQuery.contains("offset=100"))
+        XCTAssertTrue(pageQuery.contains("limit=50"))
+        XCTAssertTrue(pageQuery.contains("filter=active"))
+    }
+
     @MainActor
     func testSidebarSeparatesWorkspaceNetworkPolicyAndInfrastructure() {
         XCTAssertEqual(Set(WorkspaceSection.allCases.flatMap(\.pages)), Set(WorkspacePage.allCases))

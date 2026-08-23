@@ -13,7 +13,7 @@
             </Grid.RowDefinitions>
 
             <Border Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="8" Padding="4,0" Margin="0,0,0,10">
-                <ListBox x:Name="ResourceTabList" BorderThickness="0" Background="Transparent" SelectionChanged="ResourceTabList_SelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                <ListBox x:Name="ResourceTabList" BorderThickness="0" Background="Transparent" SelectionChanged="ResourceTabList_SelectionChanged" PreviewMouseLeftButtonDown="ResourceTabList_PreviewMouseLeftButtonDown" ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Disabled">
                     <ListBox.ItemsPanel>
                         <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
                     </ListBox.ItemsPanel>
@@ -70,11 +70,11 @@
                 <Border Grid.Column="0" Style="{StaticResource CardBorder}" Padding="15" Margin="0,0,5,0">
                     <Grid>
                         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                        <Grid><TextBlock Text="资源健康状态" FontSize="15" FontWeight="SemiBold"/><TextBlock Text="实时快照" Style="{StaticResource CaptionText}" HorizontalAlignment="Right"/></Grid>
+                        <Grid><TextBlock Text="资源健康状态" FontSize="15" FontWeight="SemiBold"/><TextBlock x:Name="HealthPanelNoteText" Text="实时快照" Style="{StaticResource CaptionText}" HorizontalAlignment="Right"/></Grid>
                         <StackPanel Grid.Row="1" VerticalAlignment="Center">
-                            <Grid Margin="0,5"><Grid.ColumnDefinitions><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/><ColumnDefinition Width="45"/></Grid.ColumnDefinitions><TextBlock Text="正常" VerticalAlignment="Center"/><ProgressBar x:Name="HealthyProgress" Grid.Column="1" Height="7" Foreground="{StaticResource SuccessBrush}" Background="#ECF1F5" VerticalAlignment="Center"/><TextBlock x:Name="HealthyProgressText" Grid.Column="2" Text="0" HorizontalAlignment="Right" VerticalAlignment="Center"/></Grid>
-                            <Grid Margin="0,5"><Grid.ColumnDefinitions><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/><ColumnDefinition Width="45"/></Grid.ColumnDefinitions><TextBlock Text="需要关注" VerticalAlignment="Center"/><ProgressBar x:Name="AttentionProgress" Grid.Column="1" Height="7" Foreground="{StaticResource WarningBrush}" Background="#ECF1F5" VerticalAlignment="Center"/><TextBlock x:Name="AttentionProgressText" Grid.Column="2" Text="0" HorizontalAlignment="Right" VerticalAlignment="Center"/></Grid>
-                            <Grid Margin="0,5"><Grid.ColumnDefinitions><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/><ColumnDefinition Width="45"/></Grid.ColumnDefinitions><TextBlock Text="状态未知" VerticalAlignment="Center"/><ProgressBar x:Name="UnknownProgress" Grid.Column="1" Height="7" Foreground="#98A2B3" Background="#ECF1F5" VerticalAlignment="Center"/><TextBlock x:Name="UnknownProgressText" Grid.Column="2" Text="0" HorizontalAlignment="Right" VerticalAlignment="Center"/></Grid>
+                            <Grid Margin="0,5"><Grid.ColumnDefinitions><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/><ColumnDefinition Width="45"/></Grid.ColumnDefinitions><TextBlock x:Name="HealthyLabelText" Text="正常" VerticalAlignment="Center"/><ProgressBar x:Name="HealthyProgress" Grid.Column="1" Height="7" Foreground="{StaticResource SuccessBrush}" Background="#ECF1F5" VerticalAlignment="Center"/><TextBlock x:Name="HealthyProgressText" Grid.Column="2" Text="0" HorizontalAlignment="Right" VerticalAlignment="Center"/></Grid>
+                            <Grid Margin="0,5"><Grid.ColumnDefinitions><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/><ColumnDefinition Width="45"/></Grid.ColumnDefinitions><TextBlock x:Name="AttentionLabelText" Text="需要关注" VerticalAlignment="Center"/><ProgressBar x:Name="AttentionProgress" Grid.Column="1" Height="7" Foreground="{StaticResource WarningBrush}" Background="#ECF1F5" VerticalAlignment="Center"/><TextBlock x:Name="AttentionProgressText" Grid.Column="2" Text="0" HorizontalAlignment="Right" VerticalAlignment="Center"/></Grid>
+                            <Grid Margin="0,5"><Grid.ColumnDefinitions><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/><ColumnDefinition Width="45"/></Grid.ColumnDefinitions><TextBlock x:Name="UnknownLabelText" Text="状态未知" VerticalAlignment="Center"/><ProgressBar x:Name="UnknownProgress" Grid.Column="1" Height="7" Foreground="#98A2B3" Background="#ECF1F5" VerticalAlignment="Center"/><TextBlock x:Name="UnknownProgressText" Grid.Column="2" Text="0" HorizontalAlignment="Right" VerticalAlignment="Center"/></Grid>
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -112,7 +112,12 @@
                         </StackPanel>
                     </Grid>
                     <Grid Grid.Row="1">
-                        <DataGrid x:Name="ResourceGrid" AutoGenerateColumns="False" SelectionChanged="ResourceGrid_SelectionChanged">
+                        <DataGrid x:Name="ResourceGrid" AutoGenerateColumns="False" SelectionChanged="ResourceGrid_SelectionChanged" PreviewMouseLeftButtonUp="ResourceGrid_PreviewMouseLeftButtonUp">
+                            <DataGrid.CellStyle>
+                                <Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+                                    <Setter Property="Cursor" Value="Hand"/>
+                                </Style>
+                            </DataGrid.CellStyle>
                             <DataGrid.Columns>
                                 <DataGridTemplateColumn Header="资源" Width="2*">
                                     <DataGridTemplateColumn.CellTemplate><DataTemplate><StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Border Width="30" Height="30" Background="#E4F0FF" CornerRadius="6" Margin="0,0,10,0"><TextBlock Text="{Binding Glyph}" Foreground="{StaticResource PrimaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><StackPanel VerticalAlignment="Center"><TextBlock Text="{Binding Name}" FontWeight="SemiBold"/><TextBlock Text="{Binding Subtitle}" Style="{StaticResource CaptionText}" TextTrimming="CharacterEllipsis"/></StackPanel></StackPanel></DataTemplate></DataGridTemplateColumn.CellTemplate>
@@ -150,6 +155,27 @@
                     </ScrollViewer>
                     <StackPanel Grid.Row="3" Margin="0,14,0,0">
                         <Button x:Name="OpenDetailsButton" Content="刷新完整详情" Click="OpenDetailsButton_Click"/>
+                        <TextBlock x:Name="DrawerActionsTitleText" Text="可用操作" FontSize="14" FontWeight="SemiBold" Margin="0,14,0,5"/>
+                        <ItemsControl x:Name="DrawerActionsList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type models:OfficialApiOperation}">
+                                    <Button Content="{Binding Title}" Tag="{Binding}" ToolTip="{Binding Description}" Margin="0,5,0,0" Click="DrawerActionButton_Click">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsDestructive}" Value="True">
+                                                        <Setter Property="Background" Value="#FFF1F2"/>
+                                                        <Setter Property="BorderBrush" Value="#FECDD3"/>
+                                                        <Setter Property="Foreground" Value="{StaticResource DangerBrush}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock x:Name="DrawerCapabilityText" Text="官方 API 对此资源仅提供查询能力。" Style="{StaticResource CaptionText}" TextWrapping="Wrap" Margin="0,7,0,0"/>
                         <Button Content="复制资源 ID" Margin="0,7,0,0" Click="CopyIdButton_Click"/>
                     </StackPanel>
                 </Grid>

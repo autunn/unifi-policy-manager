@@ -170,6 +170,65 @@ public static class SelfTest
                 throw new Exception("Visual resource type distribution was not generated.");
         });
 
+        await CheckAsync("official_resource_paging_health_and_context_actions", () =>
+        {
+            var countriesPageOne = OfficialResourcePresentationService.Parse(
+                "{\"data\":[{\"code\":\"CN\",\"name\":\"China\"},{\"code\":\"US\",\"name\":\"United States\"}],\"totalCount\":3}",
+                "resources");
+            var countriesPageTwo = OfficialResourcePresentationService.Parse(
+                "{\"data\":[{\"code\":\"US\",\"name\":\"United States\"},{\"code\":\"JP\",\"name\":\"Japan\"}],\"totalCount\":3}",
+                "resources");
+            var merged = OfficialResourceInteractionService.MergePages([countriesPageOne, countriesPageTwo]);
+            if (merged.Items.Count != 3 || merged.TotalCount != 3)
+                throw new Exception("Paged official resources were not merged and deduplicated.");
+            if (merged.HasHealthData || merged.HealthyCount != 0 || merged.AttentionCount != 0 || merged.UnknownCount != 0)
+                throw new Exception("Reference resources without a status field were incorrectly classified as healthy or unknown.");
+
+            var networkList = OfficialApiCatalog.Operations.Single(operation => operation.Id == "getNetworksOverviewPage");
+            var networkOperations = OfficialApiCatalog.ForModule("networks");
+            if (OfficialResourceInteractionService.FindPrimaryOperation(networkList, networkOperations)?.Id != "createNetwork")
+                throw new Exception("The network list did not resolve its collection create action.");
+            var networkItemActions = OfficialResourceInteractionService.FindItemOperations(networkList, networkOperations);
+            if (!new[] { "getNetworkDetails", "updateNetwork", "deleteNetwork", "getNetworkReferences" }
+                .All(id => networkItemActions.Any(operation => operation.Id == id)))
+                throw new Exception("Network item CRUD and reference actions were not resolved for the inspector.");
+            if (OfficialResourceInteractionService.FindDetailOperation(networkList, networkOperations)?.Id != "getNetworkDetails")
+                throw new Exception("The update safety prefetch did not select the network details endpoint.");
+
+            var countryList = OfficialApiCatalog.Operations.Single(operation => operation.Id == "getCountries");
+            if (OfficialResourceInteractionService.FindItemOperations(countryList, OfficialApiCatalog.ForModule("resources")).Count != 0)
+                throw new Exception("Read-only country resources unexpectedly exposed item write actions.");
+            var pendingList = OfficialApiCatalog.Operations.Single(operation => operation.Id == "getPendingDevicePage");
+            if (OfficialResourceInteractionService.FindItemOperations(pendingList, OfficialApiCatalog.ForModule("devices")).Single().Id != "adoptDevice")
+                throw new Exception("Pending devices did not expose the official adopt action.");
+
+            var pageQuery = OfficialResourceInteractionService.BuildPageQuery("offset=0&limit=50&filter=active", 100, 50);
+            if (!pageQuery.Contains("offset=100", StringComparison.Ordinal)
+                || !pageQuery.Contains("limit=50", StringComparison.Ordinal)
+                || !pageQuery.Contains("filter=active", StringComparison.Ordinal))
+                throw new Exception("Paging query generation did not preserve existing query values.");
+            return Task.CompletedTask;
+        });
+
+        await CheckAsync("official_update_form_prefills_selected_resource", () =>
+        {
+            var operation = OfficialApiCatalog.Operations.Single(item => item.Id == "updateNetwork");
+            var selected = new OfficialResourceItem
+            {
+                Id = "network-id",
+                RawJson = "{\"id\":\"network-id\",\"name\":\"Existing Network\",\"enabled\":false,\"management\":\"UNMANAGED\",\"vlanId\":42}"
+            };
+            var dialog = new OfficialOperationDialog(operation, "site-id", selected);
+            var fields = dialog.FieldsGrid.Items.Cast<OperationFieldRow>().ToList();
+            if (fields.Single(field => field.Key == "networkId").Value != "network-id"
+                || fields.Single(field => field.Key == "name").Value != "Existing Network"
+                || fields.Single(field => field.Key == "enabled").Value != "false"
+                || fields.Single(field => field.Key == "vlanId").Value != "42")
+                throw new Exception("The update form did not prefill editable template fields from the selected resource.");
+            dialog.Close();
+            return Task.CompletedTask;
+        });
+
         await CheckAsync("secure_api_key_settings_roundtrip", () =>
         {
             var directory = Path.Combine(Path.GetTempPath(), $"unifi-policy-manager-settings-{Guid.NewGuid():N}");
@@ -228,8 +287,16 @@ public static class SelfTest
                 throw new Exception("The collapsed sidebar group did not expand independently.");
             if (main.FindName("OfficialApiPage") is not OfficialApiWorkspace apiWorkspace)
                 throw new Exception("The official API workspace was not loaded.");
-            if (main.FindName("VisualResourcePage") is not VisualResourceWorkspace)
+            if (main.FindName("VisualResourcePage") is not VisualResourceWorkspace visualWorkspace)
                 throw new Exception("The visual resource workspace was not loaded.");
+            if (visualWorkspace.FindName("DrawerActionsList") is null || visualWorkspace.FindName("DrawerCapabilityText") is null)
+                throw new Exception("The visual resource inspector does not expose contextual actions and capability guidance.");
+            var rowStyle = System.Windows.Application.Current.TryFindResource(typeof(System.Windows.Controls.DataGridRow)) as System.Windows.Style
+                ?? throw new Exception("The shared DataGridRow style was not found.");
+            var cursorSetter = rowStyle.Setters.OfType<System.Windows.Setter>()
+                .FirstOrDefault(setter => setter.Property == System.Windows.FrameworkElement.CursorProperty);
+            if (cursorSetter?.Value is not System.Windows.Input.Cursor cursor || cursor != System.Windows.Input.Cursors.Hand)
+                throw new Exception("Clickable table rows do not use the hand cursor.");
             apiWorkspace.ShowModule("all");
             var dnsTabs = main.FindName("DnsTypeTabs") as System.Windows.Controls.TabControl
                 ?? throw new Exception("DNS type tab navigation was not loaded.");

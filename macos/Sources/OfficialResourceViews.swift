@@ -19,6 +19,8 @@ struct OfficialResourceItem: Identifiable, Hashable {
     let symbol: String
     let isHealthy: Bool
     let needsAttention: Bool
+    let hasHealthData: Bool
+    let rawJSON: String
     let fields: [OfficialResourceField]
 }
 
@@ -34,24 +36,29 @@ struct OfficialResourceSnapshot {
     let totalCount: Int
     let healthyCount: Int
     let attentionCount: Int
+    let hasHealthData: Bool
+    let hasReportedTotalCount: Bool
     let distributions: [OfficialResourceDistribution]
 
-    static let empty = OfficialResourceSnapshot(items: [], totalCount: 0, healthyCount: 0, attentionCount: 0, distributions: [])
-    var unknownCount: Int { max(0, totalCount - healthyCount - attentionCount) }
+    static let empty = OfficialResourceSnapshot(items: [], totalCount: 0, healthyCount: 0, attentionCount: 0, hasHealthData: false, hasReportedTotalCount: false, distributions: [])
+    var unknownCount: Int { hasHealthData ? max(0, items.count - healthyCount - attentionCount) : 0 }
 }
 
 enum OfficialResourcePresenter {
     static func parse(_ json: String, moduleID: String) throws -> OfficialResourceSnapshot {
         let object = try JSONSerialization.jsonObject(with: Data(json.utf8), options: [.fragmentsAllowed])
         let dictionaries = extractDictionaries(object)
-        let items = dictionaries.enumerated().map { makeItem($0.element, moduleID: moduleID, index: $0.offset) }
+        let items = dictionaries.map { makeItem($0, moduleID: moduleID) }
         let root = object as? [String: Any]
-        let total = (root?["totalCount"] as? NSNumber)?.intValue
+        let reportedTotal = (root?["totalCount"] as? NSNumber)?.intValue
             ?? (root?["count"] as? NSNumber)?.intValue
-            ?? items.count
-        let hasExplicitState = items.contains { $0.state != "未知" }
-        let healthy = hasExplicitState ? items.filter(\.isHealthy).count : items.count
-        let attention = items.filter(\.needsAttention).count
+        return snapshot(items: items, totalCount: max(reportedTotal ?? items.count, items.count), hasReportedTotalCount: reportedTotal != nil)
+    }
+
+    static func snapshot(items: [OfficialResourceItem], totalCount: Int? = nil, hasReportedTotalCount: Bool = false) -> OfficialResourceSnapshot {
+        let hasExplicitState = items.contains { $0.hasHealthData }
+        let healthy = items.filter { $0.hasHealthData && $0.isHealthy }.count
+        let attention = items.filter { $0.hasHealthData && $0.needsAttention }.count
         let resourcesByType = Dictionary(grouping: items) { item in item.type }
         var grouped: [(label: String, count: Int)] = resourcesByType.map { key, value in
             (label: key.isEmpty ? "其他" : key, count: value.count)
@@ -65,9 +72,11 @@ enum OfficialResourcePresenter {
         }
         return OfficialResourceSnapshot(
             items: items,
-            totalCount: max(total, items.count),
+            totalCount: max(totalCount ?? items.count, items.count),
             healthyCount: healthy,
             attentionCount: attention,
+            hasHealthData: hasExplicitState,
+            hasReportedTotalCount: hasReportedTotalCount,
             distributions: distributions
         )
     }
@@ -82,11 +91,12 @@ enum OfficialResourcePresenter {
         return [dictionary]
     }
 
-    private static func makeItem(_ dictionary: [String: Any], moduleID: String, index: Int) -> OfficialResourceItem {
+    private static func makeItem(_ dictionary: [String: Any], moduleID: String) -> OfficialResourceItem {
         var flattened: [String: String] = [:]
         flatten(dictionary, prefix: "", output: &flattened, depth: 0)
-        let id = candidate(flattened, keys: ["id", "deviceId", "clientId", "networkId", "wifiBroadcastId", "voucherId", "macAddress"])
-            ?? "resource-\(index + 1)"
+        let rawJSON = encodedJSON(dictionary)
+        let id = candidate(flattened, keys: ["id", "deviceId", "clientId", "networkId", "wifiBroadcastId", "voucherId", "macAddress", "code", "slug", "internalReference", "name", "displayName"])
+            ?? contentIdentifier(rawJSON)
         let name = candidate(flattened, keys: ["name", "displayName", "hostname", "deviceName", "ssid", "code", "internalReference"]) ?? id
         let rawState = candidate(flattened, keys: ["status", "state", "connectionState", "adoptionState", "enabled"])
         let state = friendlyState(rawState)
@@ -104,8 +114,22 @@ enum OfficialResourcePresenter {
         return OfficialResourceItem(
             id: id, name: name, subtitle: subtitle, state: state, type: type, address: address, detail: detail,
             symbol: symbol(moduleID: moduleID, type: type), isHealthy: !attention && !normalized.isEmpty,
-            needsAttention: attention, fields: Array(fields)
+            needsAttention: attention, hasHealthData: rawState?.isEmpty == false, rawJSON: rawJSON, fields: Array(fields)
         )
+    }
+
+    private static func encodedJSON(_ dictionary: [String: Any]) -> String {
+        guard let data = try? JSONSerialization.data(withJSONObject: dictionary, options: [.sortedKeys]) else { return "{}" }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    private static func contentIdentifier(_ rawJSON: String) -> String {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in rawJSON.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return "resource-\(String(hash, radix: 16))"
     }
 
     private static func flatten(_ dictionary: [String: Any], prefix: String, output: inout [String: String], depth: Int) {
@@ -230,6 +254,120 @@ enum OfficialResourceDemo {
     }
 }
 
+enum OfficialResourceInteraction {
+    static func supportsPaging(_ operation: OfficialAPIOperation) -> Bool {
+        let values = queryValues(operation.defaultQuery)
+        return values["offset"] != nil && values["limit"] != nil
+    }
+
+    static func pageQuery(_ defaultQuery: String, offset: Int, limit: Int) -> String {
+        var values = queryValues(defaultQuery)
+        values["offset"] = String(max(0, offset))
+        values["limit"] = String(min(200, max(1, limit)))
+        return values.keys.sorted().map { key in
+            "\(queryEscape(key))=\(queryEscape(values[key] ?? ""))"
+        }.joined(separator: "&")
+    }
+
+    static func mergePages(_ pages: [OfficialResourceSnapshot]) -> OfficialResourceSnapshot {
+        var seen = Set<String>()
+        let items = pages.flatMap(\.items).filter { item in seen.insert(item.id.isEmpty ? item.rawJSON : item.id).inserted }
+        return OfficialResourcePresenter.snapshot(items: items)
+    }
+
+    static func primaryOperation(for listOperation: OfficialAPIOperation?, operations: [OfficialAPIOperation]) -> OfficialAPIOperation? {
+        guard let listOperation else { return nil }
+        if listOperation.id == "getPendingDevicePage" { return operations.first { $0.id == "adoptDevice" } }
+        return operations.first {
+            $0.method == "POST" && $0.pathParameters.isEmpty && $0.pathTemplate == listOperation.pathTemplate
+                && ($0.id.hasPrefix("create") || $0.id == "adoptDevice")
+        }
+    }
+
+    static func collectionOperations(
+        for listOperation: OfficialAPIOperation?,
+        operations: [OfficialAPIOperation],
+        primaryOperation: OfficialAPIOperation?
+    ) -> [OfficialAPIOperation] {
+        guard let listOperation else { return [] }
+        let prefix = listOperation.pathTemplate.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return operations.filter {
+            $0.id != listOperation.id && $0.id != primaryOperation?.id && $0.pathParameters.isEmpty
+                && ($0.pathTemplate == listOperation.pathTemplate
+                    || $0.pathTemplate.hasPrefix("/\(prefix)/"))
+        }
+    }
+
+    static func itemOperations(for listOperation: OfficialAPIOperation?, operations: [OfficialAPIOperation]) -> [OfficialAPIOperation] {
+        guard let listOperation else { return [] }
+        if listOperation.id == "getPendingDevicePage" {
+            return operations.filter { $0.id == "adoptDevice" }
+        }
+        let prefix = listOperation.pathTemplate.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return operations.filter {
+            !$0.pathParameters.isEmpty && $0.pathTemplate.hasPrefix("/\(prefix)/{")
+        }.sorted {
+            let lhs = operationPriority($0)
+            let rhs = operationPriority($1)
+            return lhs == rhs ? $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending : lhs < rhs
+        }
+    }
+
+    static func detailOperation(for listOperation: OfficialAPIOperation?, operations: [OfficialAPIOperation]) -> OfficialAPIOperation? {
+        guard let listOperation else { return nil }
+        let itemGETs = itemOperations(for: listOperation, operations: operations).filter { $0.method == "GET" }
+        return itemGETs.first { $0.id.localizedCaseInsensitiveContains("details") }
+            ?? itemGETs.first {
+                $0.pathTemplate.filter { $0 == "/" }.count == listOperation.pathTemplate.filter { $0 == "/" }.count + 1
+                    && $0.pathTemplate.hasSuffix("}")
+            }
+            ?? itemGETs.first
+    }
+
+    static func queryValues(_ query: String) -> [String: String] {
+        Dictionary(uniqueKeysWithValues: query.trimmingCharacters(in: CharacterSet(charactersIn: "?")).split(separator: "&").compactMap { part in
+            let pair = part.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            guard pair.count == 2 else { return nil }
+            return (String(pair[0]).removingPercentEncoding ?? String(pair[0]), String(pair[1]).removingPercentEncoding ?? String(pair[1]))
+        })
+    }
+
+    private static func queryEscape(_ value: String) -> String {
+        value.addingPercentEncoding(withAllowedCharacters: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))) ?? value
+    }
+
+    private static func operationPriority(_ operation: OfficialAPIOperation) -> Int {
+        switch operation.method { case "GET": return 0; case "PATCH": return 1; case "PUT": return 2; case "POST": return 3; case "DELETE": return 4; default: return 5 }
+    }
+}
+
+private struct PointingHandOnHover: ViewModifier {
+    @State private var cursorPushed = false
+
+    func body(content: Content) -> some View {
+        content
+            .onHover { hovering in
+                if hovering && !cursorPushed {
+                    NSCursor.pointingHand.push()
+                    cursorPushed = true
+                } else if !hovering && cursorPushed {
+                    NSCursor.pop()
+                    cursorPushed = false
+                }
+            }
+            .onDisappear {
+                if cursorPushed {
+                    NSCursor.pop()
+                    cursorPushed = false
+                }
+            }
+    }
+}
+
+extension View {
+    func pointingHandOnHover() -> some View { modifier(PointingHandOnHover()) }
+}
+
 struct VisualResourceWorkspaceView: View {
     @EnvironmentObject private var model: AppModel
     let moduleID: String
@@ -241,22 +379,26 @@ struct VisualResourceWorkspaceView: View {
     @State private var operationSheet: OfficialAPIOperation?
     @State private var operationItem: OfficialResourceItem?
     @State private var loading = false
+    @State private var loadToken = UUID()
 
     private var module: OfficialAPIModule? { OfficialAPICatalog.module(moduleID) }
     private var operations: [OfficialAPIOperation] { OfficialAPICatalog.operations(for: moduleID) }
     private var listOperations: [OfficialAPIOperation] {
         let result = operations.filter { operation in
             operation.method == "GET" && operation.pathParameters.isEmpty && operation.requiredQueryParameters.allSatisfy {
-                queryValues(operation.defaultQuery)[$0]?.isEmpty == false
+                OfficialResourceInteraction.queryValues(operation.defaultQuery)[$0]?.isEmpty == false
             }
         }
         return result.isEmpty ? Array(operations.filter { $0.method == "GET" }.prefix(1)) : result
     }
     private var primaryOperation: OfficialAPIOperation? {
-        operations.first { $0.isWrite && $0.pathParameters.isEmpty && ($0.id.hasPrefix("create") || $0.id == "adoptDevice") }
+        OfficialResourceInteraction.primaryOperation(for: selectedOperation, operations: operations)
     }
     private var otherOperations: [OfficialAPIOperation] {
-        operations.filter { !listOperations.contains($0) && $0.id != primaryOperation?.id }
+        OfficialResourceInteraction.collectionOperations(for: selectedOperation, operations: operations, primaryOperation: primaryOperation)
+    }
+    private var itemOperations: [OfficialAPIOperation] {
+        OfficialResourceInteraction.itemOperations(for: selectedOperation, operations: operations)
     }
     private var filteredItems: [OfficialResourceItem] {
         let term = search.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -289,6 +431,7 @@ struct VisualResourceWorkspaceView: View {
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(selectedListID == operation.id ? Color.accentColor : Color.secondary)
+                        .pointingHandOnHover()
                     }
                 }
                 .padding(.horizontal, 20)
@@ -298,10 +441,10 @@ struct VisualResourceWorkspaceView: View {
 
             VStack(spacing: 12) {
                 HStack(spacing: 10) {
-                    ResourceMetricCard(title: "资源总数", value: snapshot.totalCount, note: "当前分类", symbol: moduleSymbol, tint: .blue)
-                    ResourceMetricCard(title: "正常 / 可用", value: snapshot.healthyCount, note: availabilityText, symbol: "checkmark.circle", tint: .green)
-                    ResourceMetricCard(title: "需要关注", value: snapshot.attentionCount, note: "离线、停用或待处理", symbol: "exclamationmark.triangle", tint: .orange)
-                    ResourceMetricCard(title: "资源类型", value: snapshot.distributions.count, note: "来自实时返回数据", symbol: "square.grid.2x2", tint: .purple)
+                    ResourceMetricCard(title: "资源总数", value: "\(snapshot.totalCount)", note: "已完整读取当前分类", symbol: moduleSymbol, tint: .blue)
+                    ResourceMetricCard(title: "正常 / 可用", value: snapshot.hasHealthData ? "\(snapshot.healthyCount)" : "—", note: availabilityText, symbol: "checkmark.circle", tint: .green)
+                    ResourceMetricCard(title: "需要关注", value: snapshot.hasHealthData ? "\(snapshot.attentionCount)" : "—", note: snapshot.hasHealthData ? "离线、停用或待处理" : "接口未返回状态", symbol: "exclamationmark.triangle", tint: .orange)
+                    ResourceMetricCard(title: "资源类型", value: "\(snapshot.distributions.count)", note: "来自实时返回数据", symbol: "square.grid.2x2", tint: .purple)
                 }
 
                 HStack(spacing: 10) {
@@ -316,8 +459,8 @@ struct VisualResourceWorkspaceView: View {
         }
         .background(Color(nsColor: .controlBackgroundColor).opacity(0.26))
         .overlay { if loading { ProgressView("正在读取官方资源…").padding(22).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8)) } }
-        .inspector(isPresented: Binding(get: { inspectorItem != nil }, set: { if !$0 { inspectorItem = nil } })) {
-            if let inspectorItem { ResourceInspector(item: inspectorItem, detailOperation: detailOperation) { operation in prepare(operation, item: inspectorItem) } }
+        .inspector(isPresented: Binding(get: { inspectorItem != nil }, set: { if !$0 { inspectorItem = nil; selectedItemID = nil } })) {
+            if let inspectorItem { ResourceInspector(item: inspectorItem, operations: itemOperations, writeReady: model.writeReady) { operation in prepare(operation, item: inspectorItem) } }
         }
         .sheet(item: $operationSheet) { operation in
             OfficialOperationFormView(operation: operation, selectedItem: operationItem) { parameters, query, body in
@@ -344,18 +487,21 @@ struct VisualResourceWorkspaceView: View {
             }
             Spacer()
             Button("刷新", systemImage: "arrow.clockwise") { loadList() }
+                .pointingHandOnHover()
             if let primaryOperation {
                 Button(primaryOperation.title, systemImage: "plus") { prepare(primaryOperation, item: nil) }
                     .buttonStyle(.borderedProminent)
                     .disabled(primaryOperation.isWrite && !model.writeReady)
+                    .pointingHandOnHover()
             }
             if !otherOperations.isEmpty {
                 Menu("更多操作", systemImage: "ellipsis.circle") {
                     ForEach(otherOperations) { operation in
-                        Button(operation.title) { prepare(operation, item: inspectorItem) }
+                        Button(operation.title) { prepare(operation, item: nil) }
                             .disabled(operation.isWrite && !model.writeReady)
                     }
                 }
+                .pointingHandOnHover()
             }
         }
         .padding(20)
@@ -377,6 +523,10 @@ struct VisualResourceWorkspaceView: View {
                         Image(systemName: item.symbol).foregroundStyle(.tint).frame(width: 25, height: 25).background(Color.accentColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 6))
                         VStack(alignment: .leading, spacing: 2) { Text(item.name).fontWeight(.medium); Text(item.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture { selectedItemID = item.id; inspectorItem = item }
+                    .pointingHandOnHover()
                 }.width(min: 190, ideal: 250)
                 TableColumn("状态", value: \.state).width(min: 90, ideal: 110)
                 TableColumn("类型 / 型号", value: \.type).width(min: 110, ideal: 150)
@@ -392,10 +542,6 @@ struct VisualResourceWorkspaceView: View {
         .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
         .overlay { RoundedRectangle(cornerRadius: 8).stroke(Color.primary.opacity(0.10)) }
         .frame(minHeight: 260)
-    }
-
-    private var detailOperation: OfficialAPIOperation? {
-        operations.first { $0.method == "GET" && !$0.pathParameters.isEmpty && ($0.id.localizedCaseInsensitiveContains("details") || $0.id.hasPrefix("get")) }
     }
 
     private var moduleSymbol: String {
@@ -414,7 +560,8 @@ struct VisualResourceWorkspaceView: View {
     }
 
     private var availabilityText: String {
-        snapshot.totalCount == 0 ? "0%" : "\(snapshot.healthyCount * 100 / max(1, snapshot.totalCount))% 可用"
+        guard snapshot.hasHealthData else { return "接口未返回状态" }
+        return snapshot.items.isEmpty ? "0%" : "\(snapshot.healthyCount * 100 / max(1, snapshot.items.count))% 可用"
     }
 
     private func resetModule() {
@@ -423,17 +570,45 @@ struct VisualResourceWorkspaceView: View {
         snapshot = .empty
         selectedItemID = nil
         inspectorItem = nil
+        loadToken = UUID()
         loadList()
     }
 
     private func loadList() {
         guard let operation = selectedOperation else { return }
+        let token = UUID()
+        loadToken = token
         Task { @MainActor in
             loading = true
-            defer { loading = false }
+            defer { if loadToken == token { loading = false } }
             do {
-                let response = try await model.requestOfficialResource(operation, query: operation.defaultQuery)
-                snapshot = try OfficialResourcePresenter.parse(response, moduleID: moduleID)
+                var pages: [OfficialResourceSnapshot] = []
+                if OfficialResourceInteraction.supportsPaging(operation) {
+                    let values = OfficialResourceInteraction.queryValues(operation.defaultQuery)
+                    var offset = max(0, Int(values["offset"] ?? "0") ?? 0)
+                    let limit = min(200, max(1, Int(values["limit"] ?? "50") ?? 50))
+                    var loadedResponseItems = 0
+                    for _ in 0..<500 {
+                        let query = OfficialResourceInteraction.pageQuery(operation.defaultQuery, offset: offset, limit: limit)
+                        let response = try await model.requestOfficialResource(operation, query: query)
+                        guard loadToken == token else { return }
+                        let page = try OfficialResourcePresenter.parse(response, moduleID: moduleID)
+                        pages.append(page)
+                        loadedResponseItems += page.items.count
+                        if page.hasReportedTotalCount {
+                            model.status = "正在读取\(operation.title.replacingOccurrences(of: "列出", with: ""))… \(min(loadedResponseItems, page.totalCount)) / \(page.totalCount)"
+                        }
+                        if page.items.isEmpty { break }
+                        if page.hasReportedTotalCount && loadedResponseItems >= page.totalCount { break }
+                        if !page.hasReportedTotalCount && page.items.count < limit { break }
+                        offset += page.items.count
+                    }
+                    snapshot = OfficialResourceInteraction.mergePages(pages)
+                } else {
+                    let response = try await model.requestOfficialResource(operation, query: operation.defaultQuery)
+                    guard loadToken == token else { return }
+                    snapshot = try OfficialResourcePresenter.parse(response, moduleID: moduleID)
+                }
                 model.status = "已读取 \(snapshot.items.count) 条\(operation.title.replacingOccurrences(of: "列出", with: ""))"
             } catch {
                 snapshot = .empty
@@ -444,6 +619,24 @@ struct VisualResourceWorkspaceView: View {
     }
 
     private func prepare(_ operation: OfficialAPIOperation, item: OfficialResourceItem?) {
+        if operation.method == "PUT", let item,
+           let detailOperation = OfficialResourceInteraction.detailOperation(for: selectedOperation, operations: operations),
+           detailOperation.pathParameters.allSatisfy({ $0.lowercased().hasSuffix("id") }) {
+            Task { @MainActor in
+                loading = true
+                defer { loading = false }
+                do {
+                    let parameters = Dictionary(uniqueKeysWithValues: detailOperation.pathParameters.map { ($0, item.id) })
+                    let response = try await model.requestOfficialResource(detailOperation, parameters: parameters)
+                    operationItem = try OfficialResourcePresenter.parse(response, moduleID: moduleID).items.first ?? item
+                    operationSheet = operation
+                } catch {
+                    model.status = "无法读取最新配置：\(error.localizedDescription)"
+                    model.errorMessage = "为避免用不完整数据覆盖配置，更新前必须先读取完整详情。\n\n\(error.localizedDescription)"
+                }
+            }
+            return
+        }
         if operation.method == "GET", !operation.hasBody, operation.defaultQuery.isEmpty,
            !operation.pathParameters.isEmpty, operation.pathParameters.allSatisfy({ $0.lowercased().hasSuffix("id") }), let item {
             let parameters = Dictionary(uniqueKeysWithValues: operation.pathParameters.map { ($0, item.id) })
@@ -472,18 +665,11 @@ struct VisualResourceWorkspaceView: View {
         }
     }
 
-    private func queryValues(_ query: String) -> [String: String] {
-        Dictionary(uniqueKeysWithValues: query.trimmingCharacters(in: CharacterSet(charactersIn: "?")).split(separator: "&").compactMap { part in
-            let pair = part.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
-            guard pair.count == 2 else { return nil }
-            return (String(pair[0]), String(pair[1]))
-        })
-    }
 }
 
 private struct ResourceMetricCard: View {
     let title: String
-    let value: Int
+    let value: String
     let note: String
     let symbol: String
     let tint: Color
@@ -491,7 +677,7 @@ private struct ResourceMetricCard: View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 5) {
                 Text(title).font(.caption).foregroundStyle(.secondary)
-                Text("\(value)").font(.title2.weight(.semibold))
+                Text(value).font(.title2.weight(.semibold))
                 Text(note).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer(minLength: 8)
@@ -507,10 +693,15 @@ private struct ResourceHealthPanel: View {
     let snapshot: OfficialResourceSnapshot
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack { Text("资源健康状态").fontWeight(.semibold); Spacer(); Text("实时快照").font(.caption).foregroundStyle(.secondary) }
-            HealthRow(label: "正常", value: snapshot.healthyCount, total: snapshot.totalCount, tint: .green)
-            HealthRow(label: "需要关注", value: snapshot.attentionCount, total: snapshot.totalCount, tint: .orange)
-            HealthRow(label: "状态未知", value: snapshot.unknownCount, total: snapshot.totalCount, tint: .gray)
+            HStack { Text("资源健康状态").fontWeight(.semibold); Spacer(); Text(snapshot.hasHealthData ? "实时快照" : "接口未返回状态字段").font(.caption).foregroundStyle(.secondary) }
+            if snapshot.hasHealthData {
+                HealthRow(label: "正常", value: snapshot.healthyCount, total: snapshot.items.count, tint: .green)
+                HealthRow(label: "需要关注", value: snapshot.attentionCount, total: snapshot.items.count, tint: .orange)
+                HealthRow(label: "状态未知", value: snapshot.unknownCount, total: snapshot.items.count, tint: .gray)
+            } else {
+                ContentUnavailableView("无状态字段", systemImage: "info.circle", description: Text("此官方接口只返回参考数据，不能据此判断健康状态。"))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
         .padding(14).frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
@@ -547,8 +738,15 @@ private struct ResourceTypePanel: View {
 
 private struct ResourceInspector: View {
     let item: OfficialResourceItem
-    let detailOperation: OfficialAPIOperation?
+    let operations: [OfficialAPIOperation]
+    let writeReady: Bool
     let run: (OfficialAPIOperation) -> Void
+    private var detailOperation: OfficialAPIOperation? {
+        operations.first { $0.id.localizedCaseInsensitiveContains("details") }
+            ?? operations.first { $0.method == "GET" && !$0.pathTemplate.contains("/references") && !$0.pathTemplate.contains("/statistics/") }
+    }
+    private var actionOperations: [OfficialAPIOperation] { operations.filter { $0.id != detailOperation?.id } }
+    private var hasWriteOperation: Bool { operations.contains { $0.isWrite } }
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 11) {
@@ -565,8 +763,26 @@ private struct ResourceInspector: View {
                 }
             }
             Spacer()
-            if let detailOperation { Button("刷新完整详情", systemImage: "arrow.clockwise") { run(detailOperation) }.buttonStyle(.borderedProminent).frame(maxWidth: .infinity) }
-            Button("复制资源 ID", systemImage: "doc.on.doc") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(item.id, forType: .string) }.frame(maxWidth: .infinity)
+            if let detailOperation {
+                Button("刷新完整详情", systemImage: "arrow.clockwise") { run(detailOperation) }
+                    .buttonStyle(.borderedProminent).frame(maxWidth: .infinity).pointingHandOnHover()
+            }
+            if !actionOperations.isEmpty {
+                Divider()
+                Text("可用操作").font(.headline)
+                ForEach(actionOperations) { operation in
+                    Button(role: operation.isDestructive ? .destructive : nil) { run(operation) } label: {
+                        Label(operation.title, systemImage: operation.isWrite ? "pencil.and.list.clipboard" : "doc.text.magnifyingglass")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .disabled(operation.isWrite && !writeReady)
+                    .pointingHandOnHover()
+                }
+            }
+            Text(hasWriteOperation ? "写操作使用官方 API，并在执行前要求再次确认。" : "官方 API 对此资源仅提供查询能力。")
+                .font(.caption).foregroundStyle(.secondary)
+            Button("复制资源 ID", systemImage: "doc.on.doc") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(item.id, forType: .string) }
+                .frame(maxWidth: .infinity).pointingHandOnHover()
         }
         .padding(18).inspectorColumnWidth(min: 300, ideal: 350, max: 430)
     }
@@ -618,10 +834,12 @@ private struct OfficialOperationFormView: View {
             HStack {
                 Spacer()
                 Button("取消") { dismiss() }
+                    .pointingHandOnHover()
                 Button(operation.isWrite ? "检查并执行" : "读取") {
                     if operation.isWrite { confirmingWrite = true } else { submit() }
                 }
                 .buttonStyle(.borderedProminent)
+                .pointingHandOnHover()
             }
             .padding(16)
         }
@@ -658,6 +876,10 @@ private struct OfficialOperationFormView: View {
     }
 
     private static func makeFields(operation: OfficialAPIOperation, selectedItem: OfficialResourceItem?) -> [OperationFormField] {
+        let selectedObject = selectedItem.flatMap { item -> [String: Any]? in
+            guard let object = try? JSONSerialization.jsonObject(with: Data(item.rawJSON.utf8), options: [.fragmentsAllowed]) else { return nil }
+            return object as? [String: Any]
+        }
         var fields = operation.pathParameters.map { parameter in
             OperationFormField(category: "对象", key: parameter, label: friendlyField(parameter), value: parameter.lowercased().hasSuffix("id") ? (selectedItem?.id ?? "") : "", required: true, kind: "String")
         }
@@ -666,23 +888,37 @@ private struct OfficialOperationFormView: View {
             fields.append(OperationFormField(category: "选项", key: key, label: friendlyField(key), value: value, required: required.contains(key), kind: "String"))
         }
         if operation.hasBody, let object = try? JSONSerialization.jsonObject(with: Data(operation.defaultBody.utf8)) as? [String: Any] {
-            flattenBody(object, prefix: "", output: &fields)
+            flattenBody(object, selectedObject: selectedObject, prefix: "", output: &fields)
         }
         return fields
     }
 
-    private static func flattenBody(_ object: [String: Any], prefix: String, output: inout [OperationFormField]) {
+    private static func flattenBody(_ object: [String: Any], selectedObject: [String: Any]?, prefix: String, output: inout [OperationFormField]) {
         for (key, value) in object.sorted(by: { $0.key < $1.key }) {
             let path = prefix.isEmpty ? key : "\(prefix).\(key)"
-            if let child = value as? [String: Any] { flattenBody(child, prefix: path, output: &output); continue }
+            if let child = value as? [String: Any] { flattenBody(child, selectedObject: selectedObject, prefix: path, output: &output); continue }
+            let fieldValue = selectedObject.flatMap { valueAtPath($0, path: path.split(separator: ".").map(String.init)) } ?? value
             let kind: String
             let display: String
-            if let boolean = value as? Bool { kind = "Bool"; display = boolean ? "true" : "false" }
-            else if let array = value as? [Any] { kind = "Array"; display = array.map { String(describing: $0) }.joined(separator: ", ") }
-            else if let number = value as? NSNumber { kind = "Number"; display = number.stringValue }
-            else { kind = "String"; display = String(describing: value) }
+            if value is Bool { kind = "Bool" }
+            else if value is [Any] { kind = "Array" }
+            else if value is NSNumber { kind = "Number" }
+            else { kind = "String" }
+            if let boolean = fieldValue as? Bool { display = boolean ? "true" : "false" }
+            else if let array = fieldValue as? [Any] { display = array.map { String(describing: $0) }.joined(separator: ", ") }
+            else if let number = fieldValue as? NSNumber { display = number.stringValue }
+            else { display = String(describing: fieldValue) }
             output.append(OperationFormField(category: "参数", key: path, label: friendlyField(path), value: display, required: false, kind: kind))
         }
+    }
+
+    private static func valueAtPath(_ dictionary: [String: Any], path: [String]) -> Any? {
+        guard let key = path.first,
+              let match = dictionary.keys.first(where: { $0.caseInsensitiveCompare(key) == .orderedSame }),
+              let value = dictionary[match] else { return nil }
+        if path.count == 1 { return value is NSNull || value is [String: Any] ? nil : value }
+        guard let child = value as? [String: Any] else { return nil }
+        return valueAtPath(child, path: Array(path.dropFirst()))
     }
 
     private static func parseValue(_ field: OperationFormField) throws -> Any {

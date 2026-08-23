@@ -15,6 +15,7 @@ public sealed class OfficialResourceItem
     public string StateColor { get; init; } = "#98A2B3";
     public bool IsHealthy { get; init; }
     public bool NeedsAttention { get; init; }
+    public bool HasHealthData { get; init; }
     public string RawJson { get; init; } = "{}";
     public IReadOnlyList<OfficialResourceField> Fields { get; init; } = [];
 }
@@ -29,6 +30,11 @@ public sealed class OfficialResourceSnapshot
     public int HealthyCount { get; init; }
     public int AttentionCount { get; init; }
     public int TypeCount { get; init; }
+    public bool HasHealthData { get; init; }
+    public bool HasReportedTotalCount { get; init; }
+    public int UnknownCount => HasHealthData
+        ? Math.Max(0, Items.Count - HealthyCount - AttentionCount)
+        : 0;
 }
 
 public sealed record OfficialOperationRequest(string RelativePath, string? RequestJson);
