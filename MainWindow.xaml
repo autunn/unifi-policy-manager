@@ -1,6 +1,7 @@
 <Window x:Class="UniFiDnsManager.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:UniFiDnsManager"
         Title="UniFi Policy Manager" Width="1480" Height="930" MinWidth="1180" MinHeight="760"
         WindowStartupLocation="CenterScreen" Icon="Assets/UniFi.ico">
     <Grid>
@@ -18,9 +19,9 @@
                     </StackPanel>
                     <StackPanel Grid.Row="1" VerticalAlignment="Center" MaxWidth="500">
                         <TextBlock Text="把复杂策略，变成可预览、可恢复的变更计划。" Foreground="White" FontSize="36" FontWeight="Bold" TextWrapping="Wrap" LineHeight="48"/>
-                        <TextBlock Text="集中管理 DNS、ACL 与防火墙策略。所有修改均使用 Ubiquiti 官方 Integration API，并在执行前保存快照。" Foreground="#B5C2D4" FontSize="15" TextWrapping="Wrap" LineHeight="25" Margin="0,22,0,0"/>
+                        <TextBlock Text="集中管理策略，并覆盖 UniFi Network 官方 Integration API 的 44 条路径、73 个操作。敏感写操作执行前会显示最终请求并再次确认。" Foreground="#B5C2D4" FontSize="15" TextWrapping="Wrap" LineHeight="25" Margin="0,22,0,0"/>
                         <StackPanel Margin="0,34,0,0">
-                            <TextBlock Text="✓  策略差异预览与严格同步" Foreground="#DCE7F5" FontSize="14" Margin="0,0,0,12"/>
+                            <TextBlock Text="✓  73 个官方 API 操作统一工作台" Foreground="#DCE7F5" FontSize="14" Margin="0,0,0,12"/>
                             <TextBlock Text="✓  DNS 全部 7 种记录批量管理" Foreground="#DCE7F5" FontSize="14" Margin="0,0,0,12"/>
                             <TextBlock Text="✓  API Key 使用 Windows DPAPI 加密" Foreground="#DCE7F5" FontSize="14"/>
                         </StackPanel>
@@ -73,25 +74,43 @@
                         </StackPanel>
                     </StackPanel>
 
-                    <StackPanel Grid.Row="1" Margin="0,6,0,0">
-                        <TextBlock Text="工作台" Foreground="#65758D" FontSize="10" FontWeight="Bold" Margin="26,0,0,7"/>
-                        <RadioButton x:Name="DashboardNavRadio" GroupName="Navigation" Tag="Overview" IsChecked="True" Style="{StaticResource NavRadioButton}" Checked="NavigationRadio_Checked">
-                            <StackPanel Orientation="Horizontal"><TextBlock Text="⌂" FontSize="18" Width="28"/><TextBlock Text="概览" VerticalAlignment="Center"/></StackPanel>
-                        </RadioButton>
-                        <RadioButton x:Name="ChangeCenterNavRadio" GroupName="Navigation" Tag="ChangeCenter" Style="{StaticResource NavRadioButton}" Checked="NavigationRadio_Checked">
-                            <StackPanel Orientation="Horizontal"><TextBlock Text="⇄" FontSize="18" Width="28"/><TextBlock Text="策略变更中心" VerticalAlignment="Center"/></StackPanel>
-                        </RadioButton>
-                        <TextBlock Text="策略" Foreground="#65758D" FontSize="10" FontWeight="Bold" Margin="26,18,0,7"/>
-                        <RadioButton x:Name="DnsNavRadio" GroupName="Navigation" Tag="Dns" Style="{StaticResource NavRadioButton}" Checked="NavigationRadio_Checked">
-                            <StackPanel Orientation="Horizontal"><TextBlock Text="◎" FontSize="17" Width="28"/><TextBlock x:Name="DnsTabHeaderText" Text="DNS 记录" VerticalAlignment="Center"/></StackPanel>
-                        </RadioButton>
-                        <RadioButton GroupName="Navigation" Tag="Acl" Style="{StaticResource NavRadioButton}" Checked="NavigationRadio_Checked">
-                            <StackPanel Orientation="Horizontal"><TextBlock Text="◇" FontSize="17" Width="28"/><TextBlock x:Name="AclTabHeaderText" Text="ACL 规则" VerticalAlignment="Center"/></StackPanel>
-                        </RadioButton>
-                        <RadioButton GroupName="Navigation" Tag="Firewall" Style="{StaticResource NavRadioButton}" Checked="NavigationRadio_Checked">
-                            <StackPanel Orientation="Horizontal"><TextBlock Text="▣" FontSize="17" Width="28"/><TextBlock x:Name="FirewallTabHeaderText" Text="防火墙" VerticalAlignment="Center"/></StackPanel>
-                        </RadioButton>
-                    </StackPanel>
+                    <ScrollViewer x:Name="SidebarScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,6,0,0">
+                        <StackPanel>
+                            <TextBlock Text="工作台" Foreground="#65758D" FontSize="10" FontWeight="Bold" Margin="26,0,0,7"/>
+                            <RadioButton x:Name="DashboardNavRadio" GroupName="Navigation" Tag="Overview" IsChecked="True" Style="{StaticResource NavRadioButton}" Checked="NavigationRadio_Checked">
+                                <StackPanel Orientation="Horizontal"><TextBlock Text="⌂" FontSize="18" Width="28"/><TextBlock Text="概览" VerticalAlignment="Center"/></StackPanel>
+                            </RadioButton>
+                            <RadioButton x:Name="ChangeCenterNavRadio" GroupName="Navigation" Tag="ChangeCenter" Style="{StaticResource NavRadioButton}" Checked="NavigationRadio_Checked">
+                                <StackPanel Orientation="Horizontal"><TextBlock Text="⇄" FontSize="18" Width="28"/><TextBlock Text="策略变更中心" VerticalAlignment="Center"/></StackPanel>
+                            </RadioButton>
+
+                            <TextBlock Text="网络资源" Foreground="#65758D" FontSize="10" FontWeight="Bold" Margin="26,18,0,7"/>
+                            <RadioButton GroupName="Navigation" Tag="ApiDevices" Style="{StaticResource NavRadioButton}" Checked="NavigationRadio_Checked"><StackPanel Orientation="Horizontal"><TextBlock Text="◫" FontSize="17" Width="28"/><TextBlock Text="UniFi 设备" VerticalAlignment="Center"/></StackPanel></RadioButton>
+                            <RadioButton GroupName="Navigation" Tag="ApiClients" Style="{StaticResource NavRadioButton}" Checked="NavigationRadio_Checked"><StackPanel Orientation="Horizontal"><TextBlock Text="◉" FontSize="17" Width="28"/><TextBlock Text="在线客户端" VerticalAlignment="Center"/></StackPanel></RadioButton>
+                            <RadioButton GroupName="Navigation" Tag="ApiNetworks" Style="{StaticResource NavRadioButton}" Checked="NavigationRadio_Checked"><StackPanel Orientation="Horizontal"><TextBlock Text="⌘" FontSize="17" Width="28"/><TextBlock Text="网络" VerticalAlignment="Center"/></StackPanel></RadioButton>
+                            <RadioButton GroupName="Navigation" Tag="ApiWifi" Style="{StaticResource NavRadioButton}" Checked="NavigationRadio_Checked"><StackPanel Orientation="Horizontal"><TextBlock Text="◖" FontSize="17" Width="28"/><TextBlock Text="WiFi 广播" VerticalAlignment="Center"/></StackPanel></RadioButton>
+                            <RadioButton GroupName="Navigation" Tag="ApiHotspot" Style="{StaticResource NavRadioButton}" Checked="NavigationRadio_Checked"><StackPanel Orientation="Horizontal"><TextBlock Text="◇" FontSize="17" Width="28"/><TextBlock Text="Hotspot 凭证" VerticalAlignment="Center"/></StackPanel></RadioButton>
+
+                            <TextBlock Text="策略与安全" Foreground="#65758D" FontSize="10" FontWeight="Bold" Margin="26,18,0,7"/>
+                            <RadioButton x:Name="DnsNavRadio" GroupName="Navigation" Tag="Dns" Style="{StaticResource NavRadioButton}" Checked="NavigationRadio_Checked">
+                                <StackPanel Orientation="Horizontal"><TextBlock Text="◎" FontSize="17" Width="28"/><TextBlock x:Name="DnsTabHeaderText" Text="DNS 记录" VerticalAlignment="Center"/></StackPanel>
+                            </RadioButton>
+                            <RadioButton GroupName="Navigation" Tag="Acl" Style="{StaticResource NavRadioButton}" Checked="NavigationRadio_Checked">
+                                <StackPanel Orientation="Horizontal"><TextBlock Text="◇" FontSize="17" Width="28"/><TextBlock x:Name="AclTabHeaderText" Text="ACL 规则" VerticalAlignment="Center"/></StackPanel>
+                            </RadioButton>
+                            <RadioButton GroupName="Navigation" Tag="Firewall" Style="{StaticResource NavRadioButton}" Checked="NavigationRadio_Checked">
+                                <StackPanel Orientation="Horizontal"><TextBlock Text="▣" FontSize="17" Width="28"/><TextBlock x:Name="FirewallTabHeaderText" Text="防火墙策略" VerticalAlignment="Center"/></StackPanel>
+                            </RadioButton>
+                            <RadioButton GroupName="Navigation" Tag="ApiFirewall" Style="{StaticResource NavRadioButton}" Checked="NavigationRadio_Checked"><StackPanel Orientation="Horizontal"><TextBlock Text="⬡" FontSize="16" Width="28"/><TextBlock Text="防火墙区域/API" VerticalAlignment="Center"/></StackPanel></RadioButton>
+                            <RadioButton GroupName="Navigation" Tag="ApiTraffic" Style="{StaticResource NavRadioButton}" Checked="NavigationRadio_Checked"><StackPanel Orientation="Horizontal"><TextBlock Text="≋" FontSize="18" Width="28"/><TextBlock Text="流量匹配列表" VerticalAlignment="Center"/></StackPanel></RadioButton>
+
+                            <TextBlock Text="基础设施与开发" Foreground="#65758D" FontSize="10" FontWeight="Bold" Margin="26,18,0,7"/>
+                            <RadioButton GroupName="Navigation" Tag="ApiSwitching" Style="{StaticResource NavRadioButton}" Checked="NavigationRadio_Checked"><StackPanel Orientation="Horizontal"><TextBlock Text="⇆" FontSize="17" Width="28"/><TextBlock Text="交换与聚合" VerticalAlignment="Center"/></StackPanel></RadioButton>
+                            <RadioButton GroupName="Navigation" Tag="ApiResources" Style="{StaticResource NavRadioButton}" Checked="NavigationRadio_Checked"><StackPanel Orientation="Horizontal"><TextBlock Text="◌" FontSize="17" Width="28"/><TextBlock Text="WAN / VPN / 资源" VerticalAlignment="Center"/></StackPanel></RadioButton>
+                            <RadioButton GroupName="Navigation" Tag="ApiApplication" Style="{StaticResource NavRadioButton}" Checked="NavigationRadio_Checked"><StackPanel Orientation="Horizontal"><TextBlock Text="ⓘ" FontSize="17" Width="28"/><TextBlock Text="应用与站点" VerticalAlignment="Center"/></StackPanel></RadioButton>
+                            <RadioButton GroupName="Navigation" Tag="ApiAll" Style="{StaticResource NavRadioButton}" Checked="NavigationRadio_Checked"><StackPanel Orientation="Horizontal"><TextBlock Text="API" FontSize="10" FontWeight="Bold" Width="28"/><TextBlock Text="全部官方端点" VerticalAlignment="Center"/></StackPanel></RadioButton>
+                        </StackPanel>
+                    </ScrollViewer>
 
                     <Border Grid.Row="2" Background="#111C30" BorderBrush="#25344C" BorderThickness="1" CornerRadius="10" Padding="13" Margin="14,12,14,18">
                         <StackPanel>
@@ -312,6 +331,9 @@
                             </Grid>
                         </Grid>
                     </Border>
+
+                    <!-- Official Network API workspace -->
+                    <local:OfficialApiWorkspace x:Name="OfficialApiPage" Visibility="Collapsed"/>
                 </Grid>
             </Grid>
         </Grid>

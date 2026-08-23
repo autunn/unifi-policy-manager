@@ -23,6 +23,7 @@ public interface IUniFiClient : IDisposable
     Task<PolicyOrderingSnapshot> GetPolicyOrderingAsync(OfficialPolicyKind kind, CancellationToken cancellationToken = default);
     Task SetPolicyOrderingAsync(OfficialPolicyKind kind, PolicyOrderingSnapshot ordering, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<PolicyReferenceItem>> ListPolicyReferencesAsync(CancellationToken cancellationToken = default);
+    Task<string> ExecuteOfficialApiAsync(string method, string relativePath, string? requestJson = null, CancellationToken cancellationToken = default);
 }
 
 public sealed class UniFiApiException(string message, int? statusCode = null, string? details = null)

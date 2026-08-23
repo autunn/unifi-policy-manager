@@ -12,7 +12,7 @@
     <FileVersion>4.1.1.0</FileVersion>
     <Product>UniFi Policy Manager</Product>
     <Company>Local Utility</Company>
-    <Description>Official UniFi Network ACL, DNS and Firewall policy manager</Description>
+    <Description>Official UniFi Network Integration API and policy manager</Description>
     <ApplicationIcon>Assets\UniFi.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>

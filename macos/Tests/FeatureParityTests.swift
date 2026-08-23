@@ -1,8 +1,60 @@
 import Foundation
+import CryptoKit
 import XCTest
 @testable import UniFiPolicyManagerMac
 
 final class FeatureParityTests: XCTestCase {
+    func testOfficialAPICatalogCoversNetwork10457() throws {
+        let operations = OfficialAPICatalog.operations
+        XCTAssertEqual(operations.count, 73)
+        XCTAssertEqual(Set(operations.map(\.id)).count, operations.count)
+        XCTAssertTrue(operations.allSatisfy { $0.pathTemplate.hasPrefix("/v1/") })
+        XCTAssertTrue(operations.allSatisfy { ["GET", "POST", "PUT", "PATCH", "DELETE"].contains($0.method) })
+        XCTAssertTrue(operations.allSatisfy { operation in OfficialAPICatalog.modules.contains { $0.id == operation.moduleID } })
+        let fingerprintSource = operations
+            .sorted { $0.id < $1.id }
+            .map { "\($0.id)|\($0.method)|\($0.pathTemplate)" }
+            .joined(separator: "\n")
+        let fingerprint = SHA256.hash(data: Data(fingerprintSource.utf8)).map { String(format: "%02X", $0) }.joined()
+        XCTAssertEqual(fingerprint, "1341E65B95B553EFDE7711386C138431A42D407424968112518E2A5158C35DD6")
+
+        let expectedCounts = [
+            "application": 2, "devices": 8, "clients": 3, "networks": 6,
+            "wifi": 5, "hotspot": 5, "firewall": 13, "acl": 7,
+            "switching": 6, "dns": 5, "traffic": 5, "resources": 8
+        ]
+        for (module, expected) in expectedCounts {
+            XCTAssertEqual(OfficialAPICatalog.operations(for: module).count, expected, "Unexpected operation count for \(module)")
+        }
+        for operation in operations where operation.hasBody {
+            XCTAssertFalse(operation.defaultBody.isEmpty, "\(operation.id) is missing a request template")
+            _ = try JSONSerialization.jsonObject(with: Data(operation.defaultBody.utf8), options: [.fragmentsAllowed])
+        }
+
+        let portAction = try XCTUnwrap(operations.first { $0.id == "executePortAction" })
+        let resolved = try portAction.resolvedPath(
+            siteID: "site/id",
+            parameters: ["deviceId": "device/id", "portIdx": "3"]
+        )
+        XCTAssertFalse(resolved.contains("{"))
+        XCTAssertTrue(resolved.localizedCaseInsensitiveContains("site%2Fid"))
+        XCTAssertTrue(resolved.localizedCaseInsensitiveContains("device%2Fid"))
+
+        let ordering = try XCTUnwrap(operations.first { $0.id == "getFirewallPolicyOrdering" })
+        XCTAssertThrowsError(try ordering.validateQuery(ordering.defaultQuery))
+        XCTAssertNoThrow(try ordering.validateQuery("sourceFirewallZoneId=source-zone&destinationFirewallZoneId=destination-zone"))
+    }
+
+    @MainActor
+    func testSidebarSeparatesWorkspaceNetworkPolicyAndInfrastructure() {
+        XCTAssertEqual(Set(WorkspaceSection.allCases.flatMap(\.pages)), Set(WorkspacePage.allCases))
+        XCTAssertEqual(WorkspaceSection.allCases.map(\.title), ["工作台", "网络资源", "策略与安全", "基础设施与开发"])
+        XCTAssertTrue(WorkspaceSection.policy.pages.contains(.dns))
+        XCTAssertTrue(WorkspaceSection.policy.pages.contains(.acl))
+        XCTAssertTrue(WorkspaceSection.policy.pages.contains(.firewall))
+        XCTAssertEqual(WorkspacePage.apiAll.apiModuleID, "all")
+    }
+
     @MainActor
     func testDNSTypeTabsContainSevenOfficialTypesAndDriveFiltering() {
         XCTAssertEqual(DNSRecordTypeTab.allCases.map(\.rawValue), ["NS", "A", "AAAA", "CNAME", "MX", "TXT", "SRV"])

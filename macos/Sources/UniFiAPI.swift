@@ -178,6 +178,29 @@ final class UniFiAPI: @unchecked Sendable {
         return output
     }
 
+    func executeOfficial(method: String, relativePath: String, requestJSON: String?) async throws -> String {
+        let normalizedMethod = method.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard ["GET", "POST", "PUT", "PATCH", "DELETE"].contains(normalizedMethod) else {
+            throw UniFiError.api("不支持的 HTTP 方法。")
+        }
+        guard relativePath.hasPrefix("/v1/"), !relativePath.contains(".."), !relativePath.contains("://") else {
+            throw UniFiError.api("只允许调用官方 Network /v1 端点。")
+        }
+        let body: Any?
+        if let requestJSON, !requestJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            body = try JSONSerialization.jsonObject(with: Data(requestJSON.utf8), options: [.fragmentsAllowed])
+        } else {
+            body = nil
+        }
+        let object = try await rawRequest(
+            path: "/proxy/network/integration\(relativePath)",
+            method: normalizedMethod,
+            body: body
+        )
+        let data = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys, .fragmentsAllowed])
+        return String(decoding: data, as: UTF8.self)
+    }
+
     private func sitePath(_ suffix: String) -> String {
         let id = selectedSite?.id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? ""
         return "/proxy/network/integration/v1/sites/\(id)/\(suffix)"
@@ -200,6 +223,12 @@ final class UniFiAPI: @unchecked Sendable {
     }
 
     private func request(path: String, method: String = "GET", body: [String: Any]? = nil) async throws -> [String: Any] {
+        let object = try await rawRequest(path: path, method: method, body: body)
+        if let dictionary = object as? [String: Any] { return dictionary }
+        return [:]
+    }
+
+    private func rawRequest(path: String, method: String = "GET", body: Any? = nil) async throws -> Any {
         guard let url = URL(string: target + path) else { throw UniFiError.invalidHost }
         var request = URLRequest(url: url)
         request.httpMethod = method
@@ -219,10 +248,8 @@ final class UniFiAPI: @unchecked Sendable {
             if object == nil, !data.isEmpty { message += " 控制器返回了非 JSON 错误页面，请确认填写的是 Console 根地址。" }
             throw UniFiError.api(message)
         }
-        if data.isEmpty { return [:] }
-        let object = try JSONSerialization.jsonObject(with: data)
-        if let dictionary = object as? [String: Any] { return dictionary }
-        return [:]
+        if data.isEmpty { return [String: Any]() }
+        return try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
     }
 
     private func parseDNS(_ item: [String: Any]) -> DNSRecord {

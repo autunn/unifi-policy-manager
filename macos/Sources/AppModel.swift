@@ -4,27 +4,92 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum WorkspacePage: String, CaseIterable, Identifiable {
-    case overview, changes, dns, acl, firewall
+    case overview, changes
+    case apiDevices, apiClients, apiNetworks, apiWifi, apiHotspot
+    case dns, acl, firewall, apiFirewall, apiTraffic
+    case apiSwitching, apiResources, apiApplication, apiAll
 
     var id: String { rawValue }
     var title: String {
         switch self {
         case .overview: return "概览"
         case .changes: return "策略变更中心"
+        case .apiDevices: return "UniFi 设备"
+        case .apiClients: return "在线客户端"
+        case .apiNetworks: return "网络"
+        case .apiWifi: return "WiFi 广播"
+        case .apiHotspot: return "Hotspot 凭证"
         case .dns: return "DNS 记录"
         case .acl: return "ACL 规则"
         case .firewall: return "防火墙策略"
+        case .apiFirewall: return "防火墙区域/API"
+        case .apiTraffic: return "流量匹配列表"
+        case .apiSwitching: return "交换与聚合"
+        case .apiResources: return "WAN / VPN / 资源"
+        case .apiApplication: return "应用与站点"
+        case .apiAll: return "全部官方端点"
         }
     }
     var symbol: String {
         switch self {
         case .overview: return "square.grid.2x2"
         case .changes: return "arrow.triangle.2.circlepath"
+        case .apiDevices: return "externaldrive.connected.to.line.below"
+        case .apiClients: return "person.2"
+        case .apiNetworks: return "point.3.connected.trianglepath.dotted"
+        case .apiWifi: return "wifi"
+        case .apiHotspot: return "ticket"
         case .dns: return "network"
         case .acl: return "checklist.checked"
         case .firewall: return "shield.lefthalf.filled"
+        case .apiFirewall: return "hexagon"
+        case .apiTraffic: return "list.bullet.rectangle"
+        case .apiSwitching: return "arrow.triangle.swap"
+        case .apiResources: return "server.rack"
+        case .apiApplication: return "info.circle"
+        case .apiAll: return "chevron.left.forwardslash.chevron.right"
         }
     }
+
+    var section: WorkspaceSection {
+        switch self {
+        case .overview, .changes: return .workspace
+        case .apiDevices, .apiClients, .apiNetworks, .apiWifi, .apiHotspot: return .network
+        case .dns, .acl, .firewall, .apiFirewall, .apiTraffic: return .policy
+        case .apiSwitching, .apiResources, .apiApplication, .apiAll: return .infrastructure
+        }
+    }
+
+    var apiModuleID: String? {
+        switch self {
+        case .apiDevices: return "devices"
+        case .apiClients: return "clients"
+        case .apiNetworks: return "networks"
+        case .apiWifi: return "wifi"
+        case .apiHotspot: return "hotspot"
+        case .apiFirewall: return "firewall"
+        case .apiTraffic: return "traffic"
+        case .apiSwitching: return "switching"
+        case .apiResources: return "resources"
+        case .apiApplication: return "application"
+        case .apiAll: return "all"
+        default: return nil
+        }
+    }
+}
+
+enum WorkspaceSection: String, CaseIterable, Identifiable {
+    case workspace, network, policy, infrastructure
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .workspace: return "工作台"
+        case .network: return "网络资源"
+        case .policy: return "策略与安全"
+        case .infrastructure: return "基础设施与开发"
+        }
+    }
+    var pages: [WorkspacePage] { WorkspacePage.allCases.filter { $0.section == self } }
 }
 
 @MainActor
@@ -56,6 +121,7 @@ final class AppModel: ObservableObject {
     @Published var dnsBatchPreview: DNSBatchPreview?
     @Published var changePlan: PolicyChangePlan?
     @Published var synchronizeDeletes = false
+    @Published var officialAPIResponse = "选择左侧操作后执行官方请求。"
 
     private var api: UniFiAPI?
     private var loadedBundle: PolicyBundle?
@@ -171,6 +237,7 @@ final class AppModel: ObservableObject {
         dnsBatchPreview = nil
         writeReady = false
         search = ""
+        officialAPIResponse = "选择左侧操作后执行官方请求。"
         apiKey = rememberKey ? KeychainService.load() : ""
         status = "已断开连接"
     }
@@ -184,6 +251,46 @@ final class AppModel: ObservableObject {
     }
 
     func refreshAll() { Task { await perform("正在刷新全部策略…") { await self.refreshAllBody() } } }
+
+    func executeOfficialOperation(
+        _ operation: OfficialAPIOperation,
+        parameters: [String: String],
+        query: String,
+        requestBody: String
+    ) {
+        Task {
+            await perform("正在执行 \(operation.title)…") {
+                guard let siteID = self.selectedSite?.id else { throw UniFiError.api("请先选择 UniFi 站点。") }
+                var path = try operation.resolvedPath(siteID: siteID, parameters: parameters)
+                let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "?"))
+                    .replacingOccurrences(of: "\r\n", with: "&")
+                    .replacingOccurrences(of: "\r", with: "&")
+                    .replacingOccurrences(of: "\n", with: "&")
+                try operation.validateQuery(normalizedQuery)
+                if !normalizedQuery.isEmpty { path += "?\(normalizedQuery)" }
+                let body = operation.hasBody ? requestBody : nil
+                if operation.hasBody {
+                    _ = try JSONSerialization.jsonObject(with: Data(requestBody.utf8), options: [.fragmentsAllowed])
+                }
+                if self.demoMode {
+                    let response: [String: Any] = operation.method == "GET"
+                        ? ["data": [["id": "demo-resource", "name": "演示资源", "endpoint": path]], "count": 1, "totalCount": 1, "demo": true]
+                        : ["success": true, "method": operation.method, "endpoint": path, "demo": true]
+                    let data = try JSONSerialization.data(withJSONObject: response, options: [.prettyPrinted, .sortedKeys])
+                    self.officialAPIResponse = String(decoding: data, as: UTF8.self)
+                } else {
+                    self.officialAPIResponse = try await self.requireAPI().executeOfficial(
+                        method: operation.method,
+                        relativePath: path,
+                        requestJSON: body
+                    )
+                }
+                if operation.isWrite { BackupService.log("official api \(operation.method) \(operation.id)") }
+                self.status = "\(operation.title)执行成功"
+            }
+        }
+    }
 
     private func refreshAllBody() async {
         guard !demoMode else { writeReady = true; status = "演示数据已刷新"; return }

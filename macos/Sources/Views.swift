@@ -58,15 +58,15 @@ struct LoginView: View {
                     Text("UniFi 策略管理")
                         .font(.system(size: 35, weight: .bold))
                         .foregroundStyle(.white)
-                    Text("通过 Ubiquiti 官方 Integration API 管理 DNS、ACL 与防火墙策略。修改前重新读取并保存完整快照。")
+                    Text("覆盖 UniFi Network 官方 Integration API 的 44 条路径、73 个操作，并保留 DNS、ACL 与防火墙专用管理流程。")
                         .font(.system(size: 15))
                         .foregroundStyle(Color.white.opacity(0.68))
                         .lineSpacing(6)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 18)
                     VStack(alignment: .leading, spacing: 15) {
-                        LoginFeature(icon: "checkmark.shield", text: "官方 API，不使用 SSH 或内部端点")
-                        LoginFeature(icon: "arrow.counterclockwise", text: "每次写入前重新读取并保存实时基线")
+                        LoginFeature(icon: "checkmark.shield", text: "73 个官方 API 操作，不使用 SSH 或内部端点")
+                        LoginFeature(icon: "arrow.counterclockwise", text: "DNS、ACL、防火墙写入前保存实时基线")
                         LoginFeature(icon: "key", text: "API Key 存储在 macOS 钥匙串")
                     }
                     .padding(.top, 34)
@@ -205,17 +205,25 @@ struct WorkspaceView: View {
         NavigationSplitView {
             VStack(spacing: 0) {
                 BrandView(compact: true).padding(.horizontal, 18).padding(.top, 17).padding(.bottom, 22)
-                List(WorkspacePage.allCases, selection: $model.selectedPage) { page in
-                    Label {
-                        HStack {
-                            Text(page.title)
-                            Spacer()
-                            if page == .dns { Text("\(model.dnsRecords.count)") }
-                            if page == .acl { Text("\(model.aclRules.count)") }
-                            if page == .firewall { Text("\(model.firewallRules.count)") }
-                        }.foregroundStyle(.white)
-                    } icon: { Image(systemName: page.symbol).foregroundStyle(Color.white.opacity(0.72)) }
-                    .tag(page)
+                List(selection: $model.selectedPage) {
+                    ForEach(WorkspaceSection.allCases) { section in
+                        Section {
+                            ForEach(section.pages) { page in
+                                Label {
+                                    HStack {
+                                        Text(page.title)
+                                        Spacer()
+                                        if page == .dns { Text("\(model.dnsRecords.count)") }
+                                        if page == .acl { Text("\(model.aclRules.count)") }
+                                        if page == .firewall { Text("\(model.firewallRules.count)") }
+                                    }.foregroundStyle(.white)
+                                } icon: { Image(systemName: page.symbol).foregroundStyle(Color.white.opacity(0.72)) }
+                                .tag(page)
+                            }
+                        } header: {
+                            Text(section.title).foregroundStyle(Color.white.opacity(0.42)).font(.caption2.bold())
+                        }
+                    }
                 }
                 .scrollContentBackground(.hidden)
                 .listStyle(.sidebar)
@@ -231,6 +239,9 @@ struct WorkspaceView: View {
                 case .dns: DNSView()
                 case .acl: PolicyListView(kind: .acl)
                 case .firewall: PolicyListView(kind: .firewall)
+                case .apiDevices, .apiClients, .apiNetworks, .apiWifi, .apiHotspot,
+                     .apiFirewall, .apiTraffic, .apiSwitching, .apiResources, .apiApplication, .apiAll:
+                    OfficialAPIWorkspaceView(moduleID: (model.selectedPage ?? .apiAll).apiModuleID ?? "all")
                 }
             }
             .toolbar { WorkspaceToolbar() }

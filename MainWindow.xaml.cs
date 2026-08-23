@@ -38,6 +38,7 @@ public partial class MainWindow : Window
     public MainWindow(bool demoMode = false)
     {
         InitializeComponent();
+        OfficialApiPage.StatusChanged += (_, message) => SetStatus(message, message.Contains("失败", StringComparison.Ordinal));
         _uiReady = true;
         _demoMode = demoMode;
         if (!_demoMode) LoadConnectionSettings();
@@ -74,21 +75,51 @@ public partial class MainWindow : Window
 
     private void NavigateTo(string page)
     {
-        if (OverviewPage is null || ChangeCenterPage is null || DnsPage is null || AclPage is null || FirewallPage is null) return;
+        if (OverviewPage is null || ChangeCenterPage is null || DnsPage is null || AclPage is null || FirewallPage is null || OfficialApiPage is null) return;
+        var apiModuleId = ApiModuleForPage(page);
         OverviewPage.Visibility = page == "Overview" ? Visibility.Visible : Visibility.Collapsed;
         ChangeCenterPage.Visibility = page == "ChangeCenter" ? Visibility.Visible : Visibility.Collapsed;
         DnsPage.Visibility = page == "Dns" ? Visibility.Visible : Visibility.Collapsed;
         AclPage.Visibility = page == "Acl" ? Visibility.Visible : Visibility.Collapsed;
         FirewallPage.Visibility = page == "Firewall" ? Visibility.Visible : Visibility.Collapsed;
+        OfficialApiPage.Visibility = apiModuleId is not null ? Visibility.Visible : Visibility.Collapsed;
+        if (apiModuleId is not null) OfficialApiPage.ShowModule(apiModuleId);
         (PageTitleText.Text, PageSubtitleText.Text) = page switch
         {
             "ChangeCenter" => ("策略变更中心", "导入策略基线，预览并执行 DNS、ACL 与防火墙差异。"),
             "Dns" => ("DNS 记录", "管理转发域名、A、AAAA、CNAME、MX、TXT 与 SRV。"),
             "Acl" => ("ACL 规则", "管理官方 API 支持的 IPv4 与 MAC 访问控制规则。"),
             "Firewall" => ("防火墙策略", "管理用户定义防火墙策略及执行顺序。"),
+            "ApiDevices" => ("UniFi 设备", "采用、移除、查看设备，执行设备与端口动作并读取最新统计。"),
+            "ApiClients" => ("在线客户端", "查看在线客户端并执行官方访客授权动作。"),
+            "ApiNetworks" => ("网络", "通过官方 API 创建、查看、更新、删除网络并检查引用。"),
+            "ApiWifi" => ("WiFi 广播", "管理 STANDARD 与 IOT_OPTIMIZED WiFi 广播。"),
+            "ApiHotspot" => ("Hotspot 凭证", "生成、查询与删除访客网络凭证。"),
+            "ApiFirewall" => ("防火墙区域与官方端点", "覆盖防火墙策略、Patch、排序和自定义区域端点。"),
+            "ApiTraffic" => ("流量匹配列表", "管理 IPv4、IPv6 和端口匹配列表。"),
+            "ApiSwitching" => ("交换与聚合", "读取 LAG、MC-LAG Domain 和 Switch Stack。"),
+            "ApiResources" => ("WAN / VPN / 支持资源", "读取 WAN、VPN、RADIUS、设备标签、DPI 与国家资源。"),
+            "ApiApplication" => ("应用与站点", "读取 Network 应用信息和本地站点。"),
+            "ApiAll" => ("全部官方端点", "UniFi Network v10.4.57：44 条路径、73 个操作。"),
             _ => ("策略概览", "查看当前站点的策略状态与安全操作入口。")
         };
     }
+
+    private static string? ApiModuleForPage(string page) => page switch
+    {
+        "ApiDevices" => "devices",
+        "ApiClients" => "clients",
+        "ApiNetworks" => "networks",
+        "ApiWifi" => "wifi",
+        "ApiHotspot" => "hotspot",
+        "ApiFirewall" => "firewall",
+        "ApiTraffic" => "traffic",
+        "ApiSwitching" => "switching",
+        "ApiResources" => "resources",
+        "ApiApplication" => "application",
+        "ApiAll" => "all",
+        _ => null
+    };
 
     private void OpenChangeCenterButton_Click(object sender, RoutedEventArgs e)
     {
@@ -148,6 +179,7 @@ public partial class MainWindow : Window
     private void ShowWorkspace()
     {
         if (_client is null) return;
+        OfficialApiPage.SetClient(_client);
         LoginPanel.Visibility = Visibility.Collapsed;
         WorkspacePanel.Visibility = Visibility.Visible;
         ConnectionDot.Fill = new SolidColorBrush(Color.FromRgb(30, 184, 117));
@@ -161,6 +193,7 @@ public partial class MainWindow : Window
 
     private void ShowLogin()
     {
+        OfficialApiPage.SetClient(null);
         WorkspacePanel.Visibility = Visibility.Collapsed;
         LoginPanel.Visibility = Visibility.Visible;
         ConnectionDot.Fill = new SolidColorBrush(Color.FromRgb(152, 164, 176));

@@ -1,21 +1,22 @@
-# UniFi Policy Manager 4.1.1
+# UniFi Policy Manager
 
 [![Build](https://github.com/autunn/unifi-policy-manager/actions/workflows/build.yml/badge.svg)](https://github.com/autunn/unifi-policy-manager/actions/workflows/build.yml)
 [![Release](https://img.shields.io/github/v/release/autunn/unifi-policy-manager)](https://github.com/autunn/unifi-policy-manager/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-UniFi Network 策略管理工具，严格使用 Ubiquiti 官方 Integration API。
+UniFi Network 管理与策略工具，严格使用 Ubiquiti 官方 Integration API。
 
 - Windows：C# / .NET 8 / WPF 完整版
 - macOS：SwiftUI 原生完整版，与 Windows 版共享官方 API 功能范围和安全写入流程
 
 ## 4.x 主要变化
 
+- 当前开发版：按 Network v10.4.57 OpenAPI 接入全部 44 条路径、73 个操作，并为双端增加分组 Sidebar 与官方 API 工作台
 - 4.1.1：将 212 条转发域规则真正编译进 EXE，点击“载入内置规则（212）”即可直接使用
 - 4.1.0：发布包内置 212 条按服务分类的转发域 CSV，选择文件后即可预览、去重并批量新增
 - 4.0.2：改用单元格模板强制策略变更、DNS、ACL、防火墙表格的正文、复选框和操作按钮垂直居中
 
-- 全新侧边栏工作台：概览、策略变更中心、DNS、ACL、防火墙独立页面
+- 分组侧边栏工作台：工作台、网络资源、策略与安全、基础设施与开发四个导航区
 - 新增完整策略基线导入、导出和差异计算
 - 一份计划统一管理 DNS、ACL 与防火墙的新增、更新和删除
 - 导出的基线包含 ACL 与防火墙用户策略排序
@@ -26,13 +27,32 @@ UniFi Network 策略管理工具，严格使用 Ubiquiti 官方 Integration API�
 
 ## 支持范围
 
-官方 Network API 当前明确支持的 Policy Table 类型：
+程序已经逐项接入 UniFi Network v10.4.57 官方 OpenAPI 的全部 73 个操作：
+
+| Sidebar 模块 | 官方操作数 | 能力 |
+| --- | ---: | --- |
+| 应用与站点 | 2 | 应用信息、本地站点 |
+| UniFi 设备 | 8 | 待采用/已采用设备、采用、移除、设备与端口动作、统计 |
+| 在线客户端 | 3 | 客户端列表、详情、访客授权动作 |
+| 网络 | 6 | 列表、创建、详情、更新、删除、引用 |
+| WiFi 广播 | 5 | 完整 CRUD |
+| Hotspot 凭证 | 5 | 生成、查询、单个与批量删除 |
+| 防火墙 | 13 | 策略、Patch、按区域排序、自定义区域 |
+| ACL | 7 | 规则 CRUD 与排序 |
+| 交换与聚合 | 6 | LAG、MC-LAG Domain、Switch Stack |
+| DNS Policy | 5 | 完整 CRUD |
+| 流量匹配列表 | 5 | IPv4、IPv6、端口列表 CRUD |
+| 支持资源 | 8 | 国家、DPI、标签、RADIUS、VPN、WAN |
+
+Windows 与 macOS 都提供“全部官方端点”入口，并支持操作搜索、自动填充当前 Site ID、路径参数、查询参数、JSON 请求体、响应复制和写操作二次确认。防火墙排序与 Hotspot 批量删除等端点会明确提示官方必填查询参数。
+
+常用 Policy Table 类型继续使用更易操作的专用页面：
 
 - ACL 规则：列表、新增、编辑、启停、删除、排序
 - DNS 记录：转发域名、A、AAAA、CNAME、MX、TXT、SRV 的完整 CRUD
 - 防火墙策略：列表、新增、编辑、启停、删除、排序
 
-官方公开 API 当前没有 NAT、基于策略的路由、端口转发、QoS、静态路由接口，因此 4.0 不提供这些类型，也不会调用控制器内部接口或 SSH。
+官方 Network v10.4.57 OpenAPI 当前没有 NAT、基于策略的路由、端口转发、QoS、静态路由接口，因此程序不提供这些类型，也不会调用控制器内部接口或 SSH。
 
 ## 直接使用
 
@@ -64,7 +84,7 @@ macOS 端使用系统钥匙串保存 API Key，并在写入前将完整基线保
 - UCG 使用自签名证书时不要勾选“验证 HTTPS 证书”
 - Windows 版使用 DPAPI 按当前用户加密保存 API Key；macOS 版使用系统钥匙串
 
-程序调用 `/proxy/network/integration/v1/info` 验证 API Key，并自动读取 Site UUID。多站点环境会显示站点选择窗口。
+程序调用 `/proxy/network/integration/v1/info` 验证 API Key，并自动读取 Site UUID。多站点环境会显示站点选择窗口。官方 API 工作台只允许 `/v1/` 路径，并统一映射到 Console 的 `/proxy/network/integration` 前缀。
 
 ## 策略变更中心
 
@@ -115,7 +135,9 @@ EXE 内部直接封装了 212 条按服务分类的转发域规则，不依赖�
 
 - API Key 使用 Windows DPAPI 当前用户加密，设置文件中不保存明文
 - API Key 不写入策略基线、快照或操作日志
-- 修改前自动备份；操作日志位于 `%LOCALAPPDATA%\UniFiPolicyManager\logs\operations.ndjson`
+- DNS、ACL、防火墙专用页面修改前自动备份完整策略基线
+- 通用官方 API 工作台写操作显示最终路径与请求体并二次确认；审计日志只记录 operation ID 和方法，不记录请求体或查询值
+- Windows 操作日志位于 `%LOCALAPPDATA%\UniFiPolicyManager\logs\operations.ndjson`
 - 系统/派生策略保持只读
 - 不使用 SSH，不访问未公开的控制器内部接口
 

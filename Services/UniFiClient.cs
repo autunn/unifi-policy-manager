@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using UniFiDnsManager.Models;
@@ -13,6 +14,11 @@ public sealed class UniFiClient : IUniFiClient
     private const int PageSize = 200;
     private readonly HttpClient _httpClient;
     private readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions DisplayJsonOptions = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
     private UniFiSite? _selectedSite;
 
     public string Target { get; }
@@ -283,6 +289,34 @@ public sealed class UniFiClient : IUniFiClient
         await TryAppendReferencesAsync($"{siteRoot}/vpn/site-to-site-tunnels", "站点到站点 VPN", result, cancellationToken);
         await TryAppendReferencesAsync($"{siteRoot}/device-tags", "设备标签", result, cancellationToken);
         return result.DistinctBy(item => (item.Kind, item.Id)).OrderBy(item => item.Kind).ThenBy(item => item.Name).ToList();
+    }
+
+    public async Task<string> ExecuteOfficialApiAsync(
+        string method,
+        string relativePath,
+        string? requestJson = null,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedMethod = method.Trim().ToUpperInvariant();
+        if (normalizedMethod is not ("GET" or "POST" or "PUT" or "PATCH" or "DELETE"))
+            throw new UniFiApiException("不支持的 HTTP 方法。");
+        if (!relativePath.StartsWith("/v1/", StringComparison.Ordinal) || relativePath.Contains("..", StringComparison.Ordinal)
+            || relativePath.Contains("://", StringComparison.Ordinal))
+            throw new UniFiApiException("只允许调用官方 Network /v1 端点。");
+
+        JsonNode? payload = null;
+        if (!string.IsNullOrWhiteSpace(requestJson))
+        {
+            try { payload = JsonNode.Parse(requestJson); }
+            catch (JsonException ex) { throw new UniFiApiException($"请求体不是有效 JSON：{ex.Message}"); }
+        }
+
+        using var document = await SendAsync(
+            new HttpMethod(normalizedMethod),
+            $"/proxy/network/integration{relativePath}",
+            payload,
+            cancellationToken);
+        return JsonSerializer.Serialize(document.RootElement, DisplayJsonOptions);
     }
 
     private async Task<JsonDocument> SendAsync(HttpMethod method, string path, object? payload, CancellationToken cancellationToken)
