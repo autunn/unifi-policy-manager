@@ -1,0 +1,50 @@
+<Window x:Class="UniFiDnsManager.OfficialOperationDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="资源操作" Width="640" Height="650" MinWidth="520" MinHeight="460"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+    <Grid Background="{StaticResource BackgroundBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,0,1" Padding="22,18">
+            <StackPanel>
+                <TextBlock x:Name="OperationTitleText" FontSize="22" FontWeight="SemiBold"/>
+                <TextBlock x:Name="OperationDescriptionText" Style="{StaticResource CaptionText}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                <Border x:Name="WriteWarning" Background="#FFF7E8" BorderBrush="#F5CF8B" BorderThickness="1" CornerRadius="6" Padding="10,7" Margin="0,12,0,0" Visibility="Collapsed">
+                    <TextBlock Text="此操作会修改 UniFi 配置；执行前请核对所有字段。" Foreground="#9A5A00" FontSize="12"/>
+                </Border>
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="20,18">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+            <TextBlock Text="操作字段" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,10"/>
+            <Border Grid.Row="1" Style="{StaticResource CardBorder}" Padding="0">
+                <DataGrid x:Name="FieldsGrid" AutoGenerateColumns="False" IsReadOnly="False" SelectionUnit="Cell" CanUserSortColumns="False">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="分组" Binding="{Binding Category}" Width="95" IsReadOnly="True"/>
+                        <DataGridTextColumn Header="字段" Binding="{Binding Label}" Width="1.15*" IsReadOnly="True"/>
+                        <DataGridTextColumn Header="值" Binding="{Binding Value, UpdateSourceTrigger=PropertyChanged}" Width="1.75*"/>
+                        <DataGridTextColumn Header="说明" Binding="{Binding Hint}" Width="1.15*" IsReadOnly="True"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Border>
+        </Grid>
+
+        <Border Grid.Row="2" Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="20,14">
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <TextBlock x:Name="ValidationText" Foreground="{StaticResource DangerBrush}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,12,0"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Content="取消" IsCancel="True" MinWidth="84"/>
+                    <Button x:Name="ExecuteButton" Content="执行" Style="{StaticResource PrimaryButton}" MinWidth="100" Margin="8,0,0,0" Click="ExecuteButton_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
+

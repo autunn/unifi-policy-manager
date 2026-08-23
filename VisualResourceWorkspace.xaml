@@ -1,0 +1,165 @@
+<UserControl x:Class="UniFiDnsManager.VisualResourceWorkspace"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:models="clr-namespace:UniFiDnsManager.Models"
+             MinWidth="620" MinHeight="520">
+    <Grid>
+        <Grid x:Name="ContentGrid">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="150"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <Border Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="8" Padding="4,0" Margin="0,0,0,10">
+                <ListBox x:Name="ResourceTabList" BorderThickness="0" Background="Transparent" SelectionChanged="ResourceTabList_SelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate DataType="{x:Type models:OfficialApiOperation}">
+                            <TextBlock Text="{Binding Title}"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+                            <Setter Property="FontWeight" Value="SemiBold"/>
+                            <Setter Property="Padding" Value="14,12,14,10"/>
+                            <Setter Property="Margin" Value="0"/>
+                            <Setter Property="Cursor" Value="Hand"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border x:Name="TabBorder" Background="Transparent" BorderBrush="Transparent" BorderThickness="0,0,0,2" Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="TabBorder" Property="Background" Value="#F3F7FC"/></Trigger>
+                                            <Trigger Property="IsSelected" Value="True"><Setter TargetName="TabBorder" Property="BorderBrush" Value="{StaticResource PrimaryBrush}"/><Setter Property="Foreground" Value="{StaticResource PrimaryDarkBrush}"/></Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                </ListBox>
+            </Border>
+
+            <Grid Grid.Row="1" Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Style="{StaticResource StatCardBorder}" Margin="0,0,5,0">
+                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="资源总数" Style="{StaticResource CaptionText}"/><TextBlock x:Name="TotalCountText" Text="0" FontSize="25" FontWeight="SemiBold" Margin="0,5,0,0"/><TextBlock Text="当前分类" Style="{StaticResource CaptionText}" Margin="0,3,0,0"/></StackPanel><Border Grid.Column="1" Width="32" Height="32" Background="#E4F0FF" CornerRadius="7"><TextBlock x:Name="TotalGlyphText" Text="◫" Foreground="{StaticResource PrimaryBrush}" FontSize="17" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border></Grid>
+                </Border>
+                <Border Grid.Column="1" Style="{StaticResource StatCardBorder}" Margin="5,0">
+                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="正常 / 可用" Style="{StaticResource CaptionText}"/><TextBlock x:Name="HealthyCountText" Text="0" FontSize="25" FontWeight="SemiBold" Margin="0,5,0,0"/><TextBlock x:Name="HealthyNoteText" Text="0%" Style="{StaticResource CaptionText}" Margin="0,3,0,0"/></StackPanel><Border Grid.Column="1" Width="32" Height="32" Background="#E2F5E8" CornerRadius="7"><TextBlock Text="●" Foreground="{StaticResource SuccessBrush}" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border></Grid>
+                </Border>
+                <Border Grid.Column="2" Style="{StaticResource StatCardBorder}" Margin="5,0">
+                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="需要关注" Style="{StaticResource CaptionText}"/><TextBlock x:Name="AttentionCountText" Text="0" FontSize="25" FontWeight="SemiBold" Margin="0,5,0,0"/><TextBlock Text="离线、停用或待处理" Style="{StaticResource CaptionText}" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/></StackPanel><Border Grid.Column="1" Width="32" Height="32" Background="#FFF3DD" CornerRadius="7"><TextBlock Text="!" Foreground="{StaticResource WarningBrush}" FontSize="16" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border></Grid>
+                </Border>
+                <Border Grid.Column="3" Style="{StaticResource StatCardBorder}" Margin="5,0,0,0">
+                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="资源类型" Style="{StaticResource CaptionText}"/><TextBlock x:Name="TypeCountText" Text="0" FontSize="25" FontWeight="SemiBold" Margin="0,5,0,0"/><TextBlock Text="来自实时返回数据" Style="{StaticResource CaptionText}" Margin="0,3,0,0"/></StackPanel><Border Grid.Column="1" Width="32" Height="32" Background="#F0EAFE" CornerRadius="7"><TextBlock Text="◫" Foreground="#7955C7" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border></Grid>
+                </Border>
+            </Grid>
+
+            <Grid Grid.Row="2" Margin="0,0,0,10">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="1.15*"/><ColumnDefinition Width="0.85*"/></Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Style="{StaticResource CardBorder}" Padding="15" Margin="0,0,5,0">
+                    <Grid>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                        <Grid><TextBlock Text="资源健康状态" FontSize="15" FontWeight="SemiBold"/><TextBlock Text="实时快照" Style="{StaticResource CaptionText}" HorizontalAlignment="Right"/></Grid>
+                        <StackPanel Grid.Row="1" VerticalAlignment="Center">
+                            <Grid Margin="0,5"><Grid.ColumnDefinitions><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/><ColumnDefinition Width="45"/></Grid.ColumnDefinitions><TextBlock Text="正常" VerticalAlignment="Center"/><ProgressBar x:Name="HealthyProgress" Grid.Column="1" Height="7" Foreground="{StaticResource SuccessBrush}" Background="#ECF1F5" VerticalAlignment="Center"/><TextBlock x:Name="HealthyProgressText" Grid.Column="2" Text="0" HorizontalAlignment="Right" VerticalAlignment="Center"/></Grid>
+                            <Grid Margin="0,5"><Grid.ColumnDefinitions><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/><ColumnDefinition Width="45"/></Grid.ColumnDefinitions><TextBlock Text="需要关注" VerticalAlignment="Center"/><ProgressBar x:Name="AttentionProgress" Grid.Column="1" Height="7" Foreground="{StaticResource WarningBrush}" Background="#ECF1F5" VerticalAlignment="Center"/><TextBlock x:Name="AttentionProgressText" Grid.Column="2" Text="0" HorizontalAlignment="Right" VerticalAlignment="Center"/></Grid>
+                            <Grid Margin="0,5"><Grid.ColumnDefinitions><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/><ColumnDefinition Width="45"/></Grid.ColumnDefinitions><TextBlock Text="状态未知" VerticalAlignment="Center"/><ProgressBar x:Name="UnknownProgress" Grid.Column="1" Height="7" Foreground="#98A2B3" Background="#ECF1F5" VerticalAlignment="Center"/><TextBlock x:Name="UnknownProgressText" Grid.Column="2" Text="0" HorizontalAlignment="Right" VerticalAlignment="Center"/></Grid>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+                <Border Grid.Column="1" Style="{StaticResource CardBorder}" Padding="15" Margin="5,0,0,0">
+                    <Grid>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                        <Grid><TextBlock Text="类型分布" FontSize="15" FontWeight="SemiBold"/><TextBlock Text="不使用虚构时序" Style="{StaticResource CaptionText}" HorizontalAlignment="Right"/></Grid>
+                        <ItemsControl x:Name="TypeDistributionList" Grid.Row="1" Margin="0,8,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,2">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/><ColumnDefinition Width="32"/></Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                        <ProgressBar Grid.Column="1" Maximum="100" Value="{Binding Percentage}" Height="6" Foreground="{StaticResource PrimaryBrush}" Background="#ECF1F5" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding Count}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <Border Grid.Row="3" Style="{StaticResource CardBorder}" Padding="0">
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <Grid Margin="13,11">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="260"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <TextBox x:Name="ResourceSearchTextBox" ToolTip="搜索名称、状态、类型、地址或 ID" TextChanged="ResourceSearchTextBox_TextChanged"/>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal">
+                            <Button Content="刷新" Style="{StaticResource ToolbarButton}" Click="RefreshButton_Click"/>
+                            <Button x:Name="PrimaryActionButton" Content="新增" Style="{StaticResource PrimaryButton}" Margin="7,0,0,0" Click="PrimaryActionButton_Click"/>
+                            <ComboBox x:Name="OperationComboBox" Width="180" Margin="7,0,0,0" DisplayMemberPath="Title" ToolTip="选择官方支持的可视化操作"/>
+                            <Button x:Name="RunOperationButton" Content="执行操作" Margin="7,0,0,0" Click="RunOperationButton_Click"/>
+                        </StackPanel>
+                    </Grid>
+                    <Grid Grid.Row="1">
+                        <DataGrid x:Name="ResourceGrid" AutoGenerateColumns="False" SelectionChanged="ResourceGrid_SelectionChanged">
+                            <DataGrid.Columns>
+                                <DataGridTemplateColumn Header="资源" Width="2*">
+                                    <DataGridTemplateColumn.CellTemplate><DataTemplate><StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Border Width="30" Height="30" Background="#E4F0FF" CornerRadius="6" Margin="0,0,10,0"><TextBlock Text="{Binding Glyph}" Foreground="{StaticResource PrimaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><StackPanel VerticalAlignment="Center"><TextBlock Text="{Binding Name}" FontWeight="SemiBold"/><TextBlock Text="{Binding Subtitle}" Style="{StaticResource CaptionText}" TextTrimming="CharacterEllipsis"/></StackPanel></StackPanel></DataTemplate></DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="状态" Width="110"><DataGridTemplateColumn.CellTemplate><DataTemplate><StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Ellipse Width="7" Height="7" Fill="{Binding StateColor}" Margin="0,0,7,0"/><TextBlock Text="{Binding State}" VerticalAlignment="Center"/></StackPanel></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+                                <DataGridTextColumn Header="类型 / 型号" Binding="{Binding Type}" Width="1.1*"/>
+                                <DataGridTextColumn Header="地址 / 标识" Binding="{Binding Address}" Width="1.15*"/>
+                                <DataGridTextColumn Header="说明" Binding="{Binding Detail}" Width="1.25*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <Border x:Name="EmptyState" Background="#FCFDFE" Visibility="Collapsed" IsHitTestVisible="False">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="420"><TextBlock Text="◫" FontSize="34" Foreground="#94A3B8" HorizontalAlignment="Center"/><TextBlock x:Name="EmptyTitleText" Text="暂无资源" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,8,0,0"/><TextBlock x:Name="EmptyDescriptionText" Text="当前接口没有返回资源，或筛选条件没有匹配项。" Style="{StaticResource CaptionText}" TextAlignment="Center" TextWrapping="Wrap" Margin="0,5,0,0"/></StackPanel>
+                        </Border>
+                    </Grid>
+                    <TextBlock x:Name="ResultCountText" Grid.Row="2" Text="显示 0 条" Style="{StaticResource CaptionText}" Margin="13,8,13,10"/>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <Grid x:Name="DrawerLayer" Visibility="Collapsed">
+            <Button Background="#55000000" BorderThickness="0" Click="CloseDrawerButton_Click"/>
+            <Border Width="370" HorizontalAlignment="Right" Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="1,0,0,0" Padding="18">
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal"><Border Width="42" Height="42" Background="#E4F0FF" CornerRadius="8" Margin="0,0,11,0"><TextBlock x:Name="DrawerGlyphText" Text="◫" Foreground="{StaticResource PrimaryBrush}" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><StackPanel VerticalAlignment="Center"><TextBlock x:Name="DrawerNameText" FontSize="18" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="245"/><StackPanel Orientation="Horizontal" Margin="0,4,0,0"><Ellipse x:Name="DrawerStateDot" Width="7" Height="7" Fill="{StaticResource SuccessBrush}" Margin="0,0,6,0"/><TextBlock x:Name="DrawerStateText" Foreground="{StaticResource SuccessBrush}"/></StackPanel></StackPanel></StackPanel>
+                        <Button Grid.Column="1" Content="×" Style="{StaticResource IconButton}" Click="CloseDrawerButton_Click"/>
+                    </Grid>
+                    <StackPanel Grid.Row="1" Margin="0,18,0,10"><TextBlock Text="资源详情" FontSize="16" FontWeight="SemiBold"/><TextBlock x:Name="DrawerSubtitleText" Style="{StaticResource CaptionText}" Margin="0,4,0,0" TextWrapping="Wrap"/></StackPanel>
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="DrawerFieldsList">
+                            <ItemsControl.ItemTemplate><DataTemplate><Grid Margin="0,6"><Grid.ColumnDefinitions><ColumnDefinition Width="120"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="{Binding Label}" Foreground="{StaticResource MutedBrush}"/><TextBlock Grid.Column="1" Text="{Binding Value}" TextWrapping="Wrap"/></Grid></DataTemplate></ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                    <StackPanel Grid.Row="3" Margin="0,14,0,0">
+                        <Button x:Name="OpenDetailsButton" Content="刷新完整详情" Click="OpenDetailsButton_Click"/>
+                        <Button Content="复制资源 ID" Margin="0,7,0,0" Click="CopyIdButton_Click"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <Border x:Name="LoadingOverlay" Background="#88FFFFFF" Visibility="Collapsed">
+            <Border Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="8" Padding="18" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal"><ProgressBar IsIndeterminate="True" Width="100" Height="7"/><TextBlock x:Name="LoadingText" Text="正在读取资源…" Margin="12,0,0,0" VerticalAlignment="Center"/></StackPanel>
+            </Border>
+        </Border>
+    </Grid>
+</UserControl>

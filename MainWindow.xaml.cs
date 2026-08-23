@@ -39,6 +39,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         OfficialApiPage.StatusChanged += (_, message) => SetStatus(message, message.Contains("失败", StringComparison.Ordinal));
+        VisualResourcePage.StatusChanged += (_, message) => SetStatus(message, message.Contains("失败", StringComparison.Ordinal));
         _uiReady = true;
         _demoMode = demoMode;
         if (!_demoMode) LoadConnectionSettings();
@@ -75,15 +76,19 @@ public partial class MainWindow : Window
 
     private void NavigateTo(string page)
     {
-        if (OverviewPage is null || ChangeCenterPage is null || DnsPage is null || AclPage is null || FirewallPage is null || OfficialApiPage is null) return;
+        if (OverviewPage is null || ChangeCenterPage is null || DnsPage is null || AclPage is null || FirewallPage is null || OfficialApiPage is null || VisualResourcePage is null) return;
         var apiModuleId = ApiModuleForPage(page);
+        var showRawApi = apiModuleId == "all";
+        var showVisualResource = apiModuleId is not null && !showRawApi;
         OverviewPage.Visibility = page == "Overview" ? Visibility.Visible : Visibility.Collapsed;
         ChangeCenterPage.Visibility = page == "ChangeCenter" ? Visibility.Visible : Visibility.Collapsed;
         DnsPage.Visibility = page == "Dns" ? Visibility.Visible : Visibility.Collapsed;
         AclPage.Visibility = page == "Acl" ? Visibility.Visible : Visibility.Collapsed;
         FirewallPage.Visibility = page == "Firewall" ? Visibility.Visible : Visibility.Collapsed;
-        OfficialApiPage.Visibility = apiModuleId is not null ? Visibility.Visible : Visibility.Collapsed;
-        if (apiModuleId is not null) OfficialApiPage.ShowModule(apiModuleId);
+        VisualResourcePage.Visibility = showVisualResource ? Visibility.Visible : Visibility.Collapsed;
+        OfficialApiPage.Visibility = showRawApi ? Visibility.Visible : Visibility.Collapsed;
+        if (showVisualResource) VisualResourcePage.ShowModule(apiModuleId!);
+        if (showRawApi) OfficialApiPage.ShowModule("all");
         (PageTitleText.Text, PageSubtitleText.Text) = page switch
         {
             "ChangeCenter" => ("策略变更中心", "导入策略基线，预览并执行 DNS、ACL 与防火墙差异。"),
@@ -180,6 +185,7 @@ public partial class MainWindow : Window
     {
         if (_client is null) return;
         OfficialApiPage.SetClient(_client);
+        VisualResourcePage.SetClient(_client);
         LoginPanel.Visibility = Visibility.Collapsed;
         WorkspacePanel.Visibility = Visibility.Visible;
         ConnectionDot.Fill = new SolidColorBrush(Color.FromRgb(30, 184, 117));
@@ -194,6 +200,7 @@ public partial class MainWindow : Window
     private void ShowLogin()
     {
         OfficialApiPage.SetClient(null);
+        VisualResourcePage.SetClient(null);
         WorkspacePanel.Visibility = Visibility.Collapsed;
         LoginPanel.Visibility = Visibility.Visible;
         ConnectionDot.Fill = new SolidColorBrush(Color.FromRgb(152, 164, 176));

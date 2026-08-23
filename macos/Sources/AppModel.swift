@@ -312,6 +312,42 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func requestOfficialResource(
+        _ operation: OfficialAPIOperation,
+        parameters: [String: String] = [:],
+        query: String = "",
+        requestBody: String? = nil
+    ) async throws -> String {
+        guard let siteID = selectedSite?.id else { throw UniFiError.api("请先选择 UniFi 站点。") }
+        var path = try operation.resolvedPath(siteID: siteID, parameters: parameters)
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "?"))
+            .replacingOccurrences(of: "\r\n", with: "&")
+            .replacingOccurrences(of: "\r", with: "&")
+            .replacingOccurrences(of: "\n", with: "&")
+        try operation.validateQuery(normalizedQuery)
+        if !normalizedQuery.isEmpty { path += "?\(normalizedQuery)" }
+
+        let body = operation.hasBody ? requestBody : nil
+        if let body, !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            _ = try JSONSerialization.jsonObject(with: Data(body.utf8), options: [.fragmentsAllowed])
+        }
+
+        let response: String
+        if demoMode {
+            response = try OfficialResourceDemo.response(for: operation, path: path)
+        } else {
+            response = try await requireAPI().executeOfficial(
+                method: operation.method,
+                relativePath: path,
+                requestJSON: body
+            )
+        }
+        if operation.isWrite { BackupService.log("official visual action \(operation.method) \(operation.id)") }
+        status = "\(operation.title)执行成功"
+        return response
+    }
+
     private func refreshAllBody() async {
         guard !demoMode else { writeReady = true; status = "演示数据已刷新"; return }
         guard let api else { writeReady = false; status = "尚未连接 UniFi Console"; return }

@@ -344,7 +344,8 @@
                         </Grid>
                     </Border>
 
-                    <!-- Official Network API workspace -->
+                    <!-- Visual resource pages for ordinary modules; raw endpoint tooling stays isolated in “全部官方端点”. -->
+                    <local:VisualResourceWorkspace x:Name="VisualResourcePage" Visibility="Collapsed"/>
                     <local:OfficialApiWorkspace x:Name="OfficialApiPage" Visibility="Collapsed"/>
                 </Grid>
             </Grid>

@@ -155,6 +155,21 @@ public static class SelfTest
                 throw new Exception("The demo client did not execute a generic official endpoint.");
         });
 
+        await CheckAsync("official_resource_presentation_uses_live_response_fields", async () =>
+        {
+            using var demo = new DemoUniFiClient();
+            var response = await demo.ExecuteOfficialApiAsync("GET", "/v1/sites/demo/devices?offset=0&limit=50");
+            var snapshot = OfficialResourcePresentationService.Parse(response, "devices");
+            if (snapshot.Items.Count != 4 || snapshot.TotalCount != 4)
+                throw new Exception("Visual device resources were not parsed from the official response envelope.");
+            if (snapshot.HealthyCount != 3 || snapshot.AttentionCount != 1)
+                throw new Exception("Visual health metrics were not derived from returned device states.");
+            if (!snapshot.Items.Any(item => item.Name == "Cloud Gateway Fiber" && item.Type == "UCG-Fiber"))
+                throw new Exception("Visual resource fields did not preserve the returned device identity and model.");
+            if (snapshot.TypeDistribution.Count == 0)
+                throw new Exception("Visual resource type distribution was not generated.");
+        });
+
         await CheckAsync("secure_api_key_settings_roundtrip", () =>
         {
             var directory = Path.Combine(Path.GetTempPath(), $"unifi-policy-manager-settings-{Guid.NewGuid():N}");
@@ -213,6 +228,8 @@ public static class SelfTest
                 throw new Exception("The collapsed sidebar group did not expand independently.");
             if (main.FindName("OfficialApiPage") is not OfficialApiWorkspace apiWorkspace)
                 throw new Exception("The official API workspace was not loaded.");
+            if (main.FindName("VisualResourcePage") is not VisualResourceWorkspace)
+                throw new Exception("The visual resource workspace was not loaded.");
             apiWorkspace.ShowModule("all");
             var dnsTabs = main.FindName("DnsTypeTabs") as System.Windows.Controls.TabControl
                 ?? throw new Exception("DNS type tab navigation was not loaded.");

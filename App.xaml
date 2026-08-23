@@ -2,21 +2,21 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
-        <SolidColorBrush x:Key="PrimaryBrush" Color="#2563EB"/>
-        <SolidColorBrush x:Key="PrimaryDarkBrush" Color="#1D4ED8"/>
-        <SolidColorBrush x:Key="AccentBrush" Color="#06B6D4"/>
+        <SolidColorBrush x:Key="PrimaryBrush" Color="#4797FF"/>
+        <SolidColorBrush x:Key="PrimaryDarkBrush" Color="#1677E8"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#38C4D9"/>
         <SolidColorBrush x:Key="DangerBrush" Color="#DC3545"/>
         <SolidColorBrush x:Key="WarningBrush" Color="#D97706"/>
-        <SolidColorBrush x:Key="SuccessBrush" Color="#059669"/>
-        <SolidColorBrush x:Key="InkBrush" Color="#172033"/>
-        <SolidColorBrush x:Key="MutedBrush" Color="#667085"/>
-        <SolidColorBrush x:Key="LineBrush" Color="#E3E8EF"/>
-        <SolidColorBrush x:Key="BackgroundBrush" Color="#F4F7FB"/>
-        <SolidColorBrush x:Key="SidebarBrush" Color="#0B1220"/>
-        <SolidColorBrush x:Key="SidebarMutedBrush" Color="#93A4BC"/>
+        <SolidColorBrush x:Key="SuccessBrush" Color="#37BE5F"/>
+        <SolidColorBrush x:Key="InkBrush" Color="#1F2937"/>
+        <SolidColorBrush x:Key="MutedBrush" Color="#6B7280"/>
+        <SolidColorBrush x:Key="LineBrush" Color="#E3E6EB"/>
+        <SolidColorBrush x:Key="BackgroundBrush" Color="#F4F5F7"/>
+        <SolidColorBrush x:Key="SidebarBrush" Color="#0D0E10"/>
+        <SolidColorBrush x:Key="SidebarMutedBrush" Color="#9299A4"/>
 
         <Style TargetType="Window">
-            <Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei UI"/>
+            <Setter Property="FontFamily" Value="Inter, Segoe UI, Microsoft YaHei UI"/>
             <Setter Property="Foreground" Value="{StaticResource InkBrush}"/>
             <Setter Property="Background" Value="{StaticResource BackgroundBrush}"/>
         </Style>
@@ -53,7 +53,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="ButtonBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                        <Border x:Name="ButtonBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" RecognizesAccessKey="True"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -100,12 +100,12 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
-                        <Border x:Name="NavBorder" Background="Transparent" CornerRadius="9" Padding="14,11">
+                        <Border x:Name="NavBorder" Background="Transparent" CornerRadius="6" Padding="14,10">
                             <ContentPresenter VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="NavBorder" Property="Background" Value="#17233A"/><Setter Property="Foreground" Value="White"/></Trigger>
-                            <Trigger Property="IsChecked" Value="True"><Setter TargetName="NavBorder" Property="Background" Value="#1D4ED8"/><Setter Property="Foreground" Value="White"/></Trigger>
+                            <Trigger Property="IsChecked" Value="True"><Setter TargetName="NavBorder" Property="Background" Value="#18304D"/><Setter Property="Foreground" Value="#82B7FF"/></Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -124,6 +124,7 @@
                     <ControlTemplate TargetType="Expander">
                         <StackPanel>
                             <ToggleButton x:Name="HeaderToggle"
+                                          Content="{TemplateBinding Header}"
                                           IsChecked="{Binding IsExpanded, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
                                           Cursor="Hand"
                                           FocusVisualStyle="{x:Null}"
@@ -282,7 +283,7 @@
             <Setter Property="Background" Value="White"/>
             <Setter Property="BorderBrush" Value="{StaticResource LineBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="CornerRadius" Value="8"/>
             <Setter Property="Padding" Value="20"/>
         </Style>
         <Style x:Key="StatCardBorder" TargetType="Border" BasedOn="{StaticResource CardBorder}">
