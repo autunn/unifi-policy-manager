@@ -10,6 +10,9 @@ Native macOS port built with SwiftUI and the official Ubiquiti Integration API.
 
 ## Included
 
+- Grouped Sidebar for workspace, network resources, policy/security, and infrastructure/developer modules
+- Complete UniFi Network v10.4.57 Integration API workbench: 44 paths and 73 GET/POST/PUT/PATCH/DELETE operations
+- Operation search, automatic Site ID replacement, path/query parameters, editable JSON templates, response copy, and write confirmation
 - Native connection and multi-site selection
 - DNS records: forward domain, A, AAAA, CNAME, MX, TXT and SRV CRUD
 - DNS batch import from TXT, CSV and XLSX with preview, validation and de-duplication
@@ -22,6 +25,7 @@ Native macOS port built with SwiftUI and the official Ubiquiti Integration API.
 - System and derived policies remain read-only
 - API Key storage in macOS Keychain
 - Automatic live DNS, ACL and firewall baseline snapshots before write operations
+- Generic API writes show the final path/body for confirmation and log only the operation ID and method, never the request body
 - Manual baseline export
 - Offline demo mode
 
@@ -55,9 +59,10 @@ swift run --package-path macos UniFiPolicyManagerMac --demo
 
 ## Feature scope
 
-The macOS and Windows editions cover the same official Integration API policy
-scope: DNS, ACL and firewall CRUD, DNS batch workflows, policy ordering and the
-complete policy change center. Features without a public Network API endpoint,
+The macOS and Windows editions cover the same complete official Network
+Integration API scope: 44 paths and 73 operations, plus dedicated DNS, ACL and
+firewall workflows, DNS batch management, policy ordering and the complete
+policy change center. Features without a public Network API endpoint,
 such as NAT, policy-based routing, port forwarding, QoS and static routes, are
 intentionally not implemented on either platform.
 

@@ -1,11 +1,17 @@
 using UniFiDnsManager.Models;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Encodings.Web;
 
 namespace UniFiDnsManager.Services;
 
 public sealed class DemoUniFiClient : IUniFiClient
 {
+    private static readonly JsonSerializerOptions DisplayJsonOptions = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
     private static readonly UniFiSite DemoSite = new("00000000-0000-0000-0000-000000000001", "default", "Default");
     private readonly List<DnsRecord> _records =
     [
@@ -155,6 +161,27 @@ public sealed class DemoUniFiClient : IUniFiClient
             new("30000000-0000-0000-0000-000000000001", "Internal", "防火墙区域"),
             new("30000000-0000-0000-0000-000000000002", "Server", "防火墙区域")
         ]);
+
+    public Task<string> ExecuteOfficialApiAsync(
+        string method,
+        string relativePath,
+        string? requestJson = null,
+        CancellationToken cancellationToken = default)
+    {
+        var response = method.Equals("GET", StringComparison.OrdinalIgnoreCase)
+            ? (object)new
+            {
+                data = new[]
+                {
+                    new { id = "00000000-0000-0000-0000-000000000001", name = "演示资源", endpoint = relativePath }
+                },
+                count = 1,
+                totalCount = 1,
+                demo = true
+            }
+            : new { success = true, method = method.ToUpperInvariant(), endpoint = relativePath, demo = true };
+        return Task.FromResult(JsonSerializer.Serialize(response, DisplayJsonOptions));
+    }
 
     private List<OfficialPolicyRule> GetPolicyList(OfficialPolicyKind kind) => kind == OfficialPolicyKind.Acl ? _aclRules : _firewallRules;
 

@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -90,6 +91,70 @@ public static class SelfTest
             return Task.CompletedTask;
         });
 
+        await CheckAsync("official_api_catalog_covers_network_10_4_57", async () =>
+        {
+            var operations = OfficialApiCatalog.Operations;
+            if (operations.Count != 73) throw new Exception($"Expected 73 official operations, got {operations.Count}.");
+            if (operations.Select(item => item.Id).Distinct(StringComparer.Ordinal).Count() != operations.Count)
+                throw new Exception("Official API operation IDs are not unique.");
+            if (operations.Any(item => !item.PathTemplate.StartsWith("/v1/", StringComparison.Ordinal)))
+                throw new Exception("An official API operation is outside the /v1 namespace.");
+            if (operations.Any(item => item.Method is not ("GET" or "POST" or "PUT" or "PATCH" or "DELETE")))
+                throw new Exception("An official API operation uses an unsupported HTTP method.");
+            if (operations.Any(item => !OfficialApiCatalog.Modules.Any(module => module.Id == item.ModuleId)))
+                throw new Exception("An official API operation references an unknown sidebar module.");
+            var fingerprintSource = string.Join('\n', operations
+                .OrderBy(item => item.Id, StringComparer.Ordinal)
+                .Select(item => $"{item.Id}|{item.Method}|{item.PathTemplate}"));
+            var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(fingerprintSource)));
+            if (fingerprint != "1341E65B95B553EFDE7711386C138431A42D407424968112518E2A5158C35DD6")
+                throw new Exception($"The operation catalog does not match the official Network v10.4.57 fingerprint: {fingerprint}.");
+
+            var expectedModuleCounts = new Dictionary<string, int>
+            {
+                ["application"] = 2, ["devices"] = 8, ["clients"] = 3, ["networks"] = 6,
+                ["wifi"] = 5, ["hotspot"] = 5, ["firewall"] = 13, ["acl"] = 7,
+                ["switching"] = 6, ["dns"] = 5, ["traffic"] = 5, ["resources"] = 8
+            };
+            foreach (var (module, expected) in expectedModuleCounts)
+            {
+                var actual = OfficialApiCatalog.ForModule(module).Count;
+                if (actual != expected) throw new Exception($"Module {module} expected {expected} operations, got {actual}.");
+            }
+
+            foreach (var operation in operations.Where(item => item.HasBody))
+            {
+                if (string.IsNullOrWhiteSpace(operation.DefaultBody))
+                    throw new Exception($"{operation.Id} is missing a request-body template.");
+                using var _ = JsonDocument.Parse(operation.DefaultBody);
+            }
+
+            var portAction = operations.Single(item => item.Id == "executePortAction");
+            var resolved = portAction.ResolvePath("site/id", new Dictionary<string, string>
+            {
+                ["deviceId"] = "device/id",
+                ["portIdx"] = "3"
+            });
+            if (resolved.Contains('{') || !resolved.Contains("site%2Fid", StringComparison.OrdinalIgnoreCase)
+                || !resolved.Contains("device%2Fid", StringComparison.OrdinalIgnoreCase))
+                throw new Exception("Official path parameter replacement or escaping failed.");
+
+            var ordering = operations.Single(item => item.Id == "getFirewallPolicyOrdering");
+            try
+            {
+                ordering.ValidateQuery(ordering.DefaultQuery);
+                throw new Exception("Required firewall ordering query parameters were not enforced.");
+            }
+            catch (InvalidOperationException) { }
+            ordering.ValidateQuery("sourceFirewallZoneId=source-zone&destinationFirewallZoneId=destination-zone");
+
+            using var demo = new DemoUniFiClient();
+            var response = await demo.ExecuteOfficialApiAsync("GET", "/v1/info");
+            using var responseDocument = JsonDocument.Parse(response);
+            if (!responseDocument.RootElement.TryGetProperty("demo", out var demoFlag) || !demoFlag.GetBoolean())
+                throw new Exception("The demo client did not execute a generic official endpoint.");
+        });
+
         await CheckAsync("secure_api_key_settings_roundtrip", () =>
         {
             var directory = Path.Combine(Path.GetTempPath(), $"unifi-policy-manager-settings-{Guid.NewGuid():N}");
@@ -127,6 +192,10 @@ public static class SelfTest
             if (main.FindName("ChangePlanGrid") is null) throw new Exception("Policy change plan grid was not loaded.");
             if (main.FindName("RememberApiKeyCheckBox") is null) throw new Exception("Remember API Key checkbox was not loaded.");
             if (main.FindName("ForgetApiKeyButton") is null) throw new Exception("Forget API Key button was not loaded.");
+            if (main.FindName("SidebarScrollViewer") is null) throw new Exception("The scrollable sidebar was not loaded.");
+            if (main.FindName("OfficialApiPage") is not OfficialApiWorkspace apiWorkspace)
+                throw new Exception("The official API workspace was not loaded.");
+            apiWorkspace.ShowModule("all");
             var dnsTabs = main.FindName("DnsTypeTabs") as System.Windows.Controls.TabControl
                 ?? throw new Exception("DNS type tab navigation was not loaded.");
             if (dnsTabs.Items.Count != DnsTypes.All.Length) throw new Exception("DNS type navigation must contain exactly seven tabs.");
