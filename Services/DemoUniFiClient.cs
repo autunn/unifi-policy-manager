@@ -168,19 +168,38 @@ public sealed class DemoUniFiClient : IUniFiClient
         string? requestJson = null,
         CancellationToken cancellationToken = default)
     {
+        var demoData = BuildOfficialDemoData(relativePath);
         var response = method.Equals("GET", StringComparison.OrdinalIgnoreCase)
-            ? (object)new
-            {
-                data = new[]
-                {
-                    new { id = "00000000-0000-0000-0000-000000000001", name = "演示资源", endpoint = relativePath }
-                },
-                count = 1,
-                totalCount = 1,
-                demo = true
-            }
+            ? (object)new { data = demoData, count = demoData.Length, totalCount = demoData.Length, demo = true }
             : new { success = true, method = method.ToUpperInvariant(), endpoint = relativePath, demo = true };
         return Task.FromResult(JsonSerializer.Serialize(response, DisplayJsonOptions));
+    }
+
+    private static object[] BuildOfficialDemoData(string relativePath)
+    {
+        if (relativePath.Contains("/devices", StringComparison.OrdinalIgnoreCase))
+            return
+            [
+                new { id = "demo-gateway", name = "Cloud Gateway Fiber", state = "ONLINE", model = "UCG-Fiber", ipAddress = "192.168.1.1", firmwareVersion = "4.2.11" },
+                new { id = "demo-switch", name = "Core Switch", state = "ONLINE", model = "Pro Max 24", ipAddress = "192.168.1.2", firmwareVersion = "7.1.26" },
+                new { id = "demo-ap-1", name = "Living Room", state = "ONLINE", model = "U7 Pro", ipAddress = "192.168.1.21", firmwareVersion = "8.0.17" },
+                new { id = "demo-ap-2", name = "Office AP", state = "UPDATING", model = "U6 Plus", ipAddress = "192.168.1.22", firmwareVersion = "7.0.66" }
+            ];
+        if (relativePath.Contains("/clients", StringComparison.OrdinalIgnoreCase))
+            return
+            [
+                new { id = "client-1", name = "MacBook Pro", state = "CONNECTED", type = "WIRELESS", ipAddress = "192.168.1.101" },
+                new { id = "client-2", name = "NAS", state = "CONNECTED", type = "WIRED", ipAddress = "192.168.1.30" }
+            ];
+        if (relativePath.Contains("/networks", StringComparison.OrdinalIgnoreCase))
+            return
+            [
+                new { id = "network-1", name = "Default", enabled = true, management = "GATEWAY", vlanId = 1 },
+                new { id = "network-2", name = "IoT", enabled = true, management = "GATEWAY", vlanId = 20 }
+            ];
+        if (relativePath.Contains("/wifi/broadcasts", StringComparison.OrdinalIgnoreCase))
+            return [new { id = "wifi-1", name = "Home WiFi", enabled = true, type = "STANDARD", securityConfiguration = new { type = "WPA2_PERSONAL" } }];
+        return [new { id = "demo-resource", name = "演示资源", status = "ACTIVE", type = "OFFICIAL", description = "官方 API 演示数据" }];
     }
 
     private List<OfficialPolicyRule> GetPolicyList(OfficialPolicyKind kind) => kind == OfficialPolicyKind.Acl ? _aclRules : _firewallRules;

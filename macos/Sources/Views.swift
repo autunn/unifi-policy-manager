@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 
 private enum Theme {
-    static let accent = Color(red: 0.10, green: 0.42, blue: 0.92)
-    static let sidebar = Color(red: 0.055, green: 0.09, blue: 0.15)
+    static let accent = Color(red: 0.28, green: 0.59, blue: 1.0)
+    static let sidebar = Color(red: 0.051, green: 0.055, blue: 0.063)
     static let line = Color.primary.opacity(0.10)
 }
 
@@ -242,8 +242,10 @@ struct WorkspaceView: View {
                 case .acl: PolicyListView(kind: .acl)
                 case .firewall: PolicyListView(kind: .firewall)
                 case .apiDevices, .apiClients, .apiNetworks, .apiWifi, .apiHotspot,
-                     .apiFirewall, .apiTraffic, .apiSwitching, .apiResources, .apiApplication, .apiAll:
-                    OfficialAPIWorkspaceView(moduleID: (model.selectedPage ?? .apiAll).apiModuleID ?? "all")
+                     .apiFirewall, .apiTraffic, .apiSwitching, .apiResources, .apiApplication:
+                    VisualResourceWorkspaceView(moduleID: (model.selectedPage ?? .apiDevices).apiModuleID ?? "devices")
+                case .apiAll:
+                    OfficialAPIWorkspaceView(moduleID: "all")
                 }
             }
             .toolbar {

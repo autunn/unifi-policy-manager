@@ -46,6 +46,22 @@ final class FeatureParityTests: XCTestCase {
     }
 
     @MainActor
+    func testVisualResourcePresentationUsesOfficialResponseFields() async throws {
+        let operation = try XCTUnwrap(OfficialAPICatalog.operations.first { $0.id == "getAdoptedDeviceOverviewPage" })
+        let model = AppModel()
+        model.startDemo()
+
+        let response = try await model.requestOfficialResource(operation, query: operation.defaultQuery)
+        let snapshot = try OfficialResourcePresenter.parse(response, moduleID: "devices")
+
+        XCTAssertEqual(snapshot.items.count, 4)
+        XCTAssertEqual(snapshot.totalCount, 4)
+        XCTAssertEqual(snapshot.healthyCount, 3)
+        XCTAssertTrue(snapshot.items.contains { $0.name == "Cloud Gateway Fiber" && $0.type == "UCG-Fiber" })
+        XCTAssertFalse(snapshot.distributions.isEmpty)
+    }
+
+    @MainActor
     func testSidebarSeparatesWorkspaceNetworkPolicyAndInfrastructure() {
         XCTAssertEqual(Set(WorkspaceSection.allCases.flatMap(\.pages)), Set(WorkspacePage.allCases))
         XCTAssertEqual(WorkspaceSection.allCases.map(\.title), ["工作台", "网络资源", "策略与安全", "基础设施与开发"])

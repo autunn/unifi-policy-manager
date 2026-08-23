@@ -11,8 +11,9 @@ Native macOS port built with SwiftUI and the official Ubiquiti Integration API.
 ## Included
 
 - Independently collapsible Sidebar groups for workspace, network resources, policy/security, and infrastructure/developer modules
-- Complete UniFi Network v10.4.57 Integration API workbench: 44 paths and 73 GET/POST/PUT/PATCH/DELETE operations
-- Operation search, automatic Site ID replacement, path/query parameters, editable JSON templates, response copy, and write confirmation
+- UniFi-style visual resource pages for ordinary modules: icons, live metrics, state/type charts, category tabs, search tables and native inspectors
+- Field-based forms for all supported create/update/action/delete operations, with automatic Site ID replacement and write confirmation
+- A separate developer workbench for all 44 paths and 73 GET/POST/PUT/PATCH/DELETE operations, including raw JSON only when explicitly opened
 - Native connection and multi-site selection
 - DNS records: forward domain, A, AAAA, CNAME, MX, TXT and SRV CRUD
 - DNS batch import from TXT, CSV and XLSX with preview, validation and de-duplication
