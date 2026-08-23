@@ -353,9 +353,10 @@
 
         <StatusBar Grid.Row="1" Background="#F8FAFC" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="8,4"><TextBlock x:Name="StatusText" Text="就绪" Foreground="{StaticResource MutedBrush}"/></StatusBar>
 
-        <Border x:Name="BusyOverlay" Grid.RowSpan="2" Background="#990B1220" Visibility="Collapsed">
-            <Border Background="White" CornerRadius="12" Padding="28" HorizontalAlignment="Center" VerticalAlignment="Center">
-                <StackPanel Orientation="Horizontal"><ProgressBar IsIndeterminate="True" Width="120" Height="8"/><TextBlock x:Name="BusyText" Text="处理中…" Margin="15,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold"/></StackPanel>
+        <Border x:Name="BusyOverlay" Grid.RowSpan="2" Background="#00FFFFFF" Cursor="Wait" Visibility="Collapsed">
+            <Border Background="White" BorderBrush="#D9E2EC" BorderThickness="1" CornerRadius="9" Padding="16,13" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,18,0,0">
+                <Border.Effect><DropShadowEffect Color="#172033" BlurRadius="18" ShadowDepth="3" Direction="270" Opacity="0.14"/></Border.Effect>
+                <StackPanel Orientation="Horizontal"><ProgressBar IsIndeterminate="True" Width="96" Height="6"/><TextBlock x:Name="BusyText" Text="处理中…" Margin="13,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold"/></StackPanel>
             </Border>
         </Border>
     </Grid>

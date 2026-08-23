@@ -194,6 +194,6 @@ public partial class OfficialApiWorkspace : UserControl
     {
         ExecuteButton.IsEnabled = !busy && _client is not null && _selectedOperation is not null;
         ExecuteButton.Content = busy ? "正在执行…" : "执行官方请求";
-        OperationListBox.IsEnabled = !busy;
+        OperationListBox.IsHitTestVisible = !busy;
     }
 }

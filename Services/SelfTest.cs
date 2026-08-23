@@ -291,12 +291,42 @@ public static class SelfTest
                 throw new Exception("The visual resource workspace was not loaded.");
             if (visualWorkspace.FindName("DrawerActionsList") is null || visualWorkspace.FindName("DrawerCapabilityText") is null)
                 throw new Exception("The visual resource inspector does not expose contextual actions and capability guidance.");
+            var drawerLayer = visualWorkspace.FindName("DrawerLayer") as System.Windows.Controls.Grid
+                ?? throw new Exception("The non-modal resource inspector layer was not loaded.");
+            if (drawerLayer.Children.OfType<System.Windows.Controls.Button>().Any())
+                throw new Exception("The resource inspector still contains a full-page dimming backdrop button.");
+            if (visualWorkspace.FindName("DrawerPanel") is not System.Windows.Controls.Border drawerPanel
+                || drawerPanel.Effect is not System.Windows.Media.Effects.DropShadowEffect)
+                throw new Exception("The resource inspector does not use a bordered, softly elevated panel.");
+            var loadingOverlay = visualWorkspace.FindName("LoadingOverlay") as System.Windows.Controls.Border
+                ?? throw new Exception("The visual resource loading layer was not loaded.");
+            if (loadingOverlay.Background is not System.Windows.Media.SolidColorBrush loadingBrush || loadingBrush.Color.A != 0)
+                throw new Exception("The visual resource loading layer still washes out the page.");
+            var contentGrid = visualWorkspace.FindName("ContentGrid") as System.Windows.Controls.Grid
+                ?? throw new Exception("The visual resource content grid was not loaded.");
+            var setLoading = typeof(VisualResourceWorkspace).GetMethod("SetLoading", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                ?? throw new Exception("The visual resource loading-state method was not found.");
+            setLoading.Invoke(visualWorkspace, [true, "visual test"]);
+            if (!contentGrid.IsEnabled || loadingOverlay.Visibility != System.Windows.Visibility.Visible)
+                throw new Exception("Loading still disables and grays the visual resource page.");
+            setLoading.Invoke(visualWorkspace, [false, ""]);
+            var busyOverlay = main.FindName("BusyOverlay") as System.Windows.Controls.Border
+                ?? throw new Exception("The global busy layer was not loaded.");
+            if (busyOverlay.Background is not System.Windows.Media.SolidColorBrush busyBrush || busyBrush.Color.A != 0)
+                throw new Exception("The global busy layer still dims the complete window.");
             var rowStyle = System.Windows.Application.Current.TryFindResource(typeof(System.Windows.Controls.DataGridRow)) as System.Windows.Style
                 ?? throw new Exception("The shared DataGridRow style was not found.");
             var cursorSetter = rowStyle.Setters.OfType<System.Windows.Setter>()
                 .FirstOrDefault(setter => setter.Property == System.Windows.FrameworkElement.CursorProperty);
             if (cursorSetter?.Value is not System.Windows.Input.Cursor cursor || cursor != System.Windows.Input.Cursors.Hand)
                 throw new Exception("Clickable table rows do not use the hand cursor.");
+            var selectedRowTrigger = rowStyle.Triggers.OfType<System.Windows.Trigger>()
+                .FirstOrDefault(trigger => trigger.Property == System.Windows.Controls.Primitives.Selector.IsSelectedProperty
+                    && Equals(trigger.Value, true));
+            var selectedBackground = selectedRowTrigger?.Setters.OfType<System.Windows.Setter>()
+                .FirstOrDefault(setter => setter.Property == System.Windows.Controls.Panel.BackgroundProperty)?.Value as System.Windows.Media.SolidColorBrush;
+            if (selectedBackground is null || selectedBackground.Color.R < 0xD8 || selectedBackground.Color.G < 0xE8)
+                throw new Exception("Selected table rows do not use a restrained light background.");
             apiWorkspace.ShowModule("all");
             var dnsTabs = main.FindName("DnsTypeTabs") as System.Windows.Controls.TabControl
                 ?? throw new Exception("DNS type tab navigation was not loaded.");

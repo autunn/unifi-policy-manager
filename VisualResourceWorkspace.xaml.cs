@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using UniFiDnsManager.Models;
 using UniFiDnsManager.Services;
 
@@ -248,6 +249,7 @@ public partial class VisualResourceWorkspace : UserControl
 
     private void ShowDrawer(OfficialResourceItem item)
     {
+        var isOpening = DrawerLayer.Visibility != Visibility.Visible;
         _selectedItem = item;
         DrawerGlyphText.Text = item.Glyph;
         DrawerNameText.Text = item.Name;
@@ -275,6 +277,26 @@ public partial class VisualResourceWorkspace : UserControl
             ? "写操作使用官方 API，并在执行前要求再次确认。"
             : "官方 API 对此资源仅提供查询能力。";
         DrawerLayer.Visibility = Visibility.Visible;
+        if (isOpening) AnimateDrawerEntrance();
+    }
+
+    private void AnimateDrawerEntrance()
+    {
+        var transform = DrawerPanel.RenderTransform as TranslateTransform ?? new TranslateTransform();
+        DrawerPanel.RenderTransform = transform;
+        transform.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation
+        {
+            From = 14,
+            To = 0,
+            Duration = TimeSpan.FromMilliseconds(150),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        });
+        DrawerPanel.BeginAnimation(OpacityProperty, new DoubleAnimation
+        {
+            From = 0.94,
+            To = 1,
+            Duration = TimeSpan.FromMilliseconds(120)
+        });
     }
 
     private void CloseDrawerButton_Click(object sender, RoutedEventArgs e) => DrawerLayer.Visibility = Visibility.Collapsed;
@@ -393,7 +415,6 @@ public partial class VisualResourceWorkspace : UserControl
     {
         LoadingText.Text = message;
         LoadingOverlay.Visibility = loading ? Visibility.Visible : Visibility.Collapsed;
-        ContentGrid.IsEnabled = !loading;
     }
 
     private void UpdateActionState()
