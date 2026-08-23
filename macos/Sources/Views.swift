@@ -18,16 +18,21 @@ struct RootView: View {
         .tint(Theme.accent)
         .overlay {
             if model.busy {
-                ZStack {
-                    Color.black.opacity(0.12).ignoresSafeArea()
+                ZStack(alignment: .top) {
+                    Color.clear.contentShape(Rectangle()).ignoresSafeArea()
                     ProgressView(model.status)
-                        .controlSize(.large)
-                        .padding(24)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
-                        .shadow(radius: 18)
+                        .controlSize(.regular)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 13)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 9))
+                        .overlay { RoundedRectangle(cornerRadius: 9).stroke(Theme.line) }
+                        .shadow(color: .black.opacity(0.14), radius: 12, y: 4)
+                        .padding(.top, 16)
                 }
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+        .animation(.easeOut(duration: 0.15), value: model.busy)
         .alert("操作失败", isPresented: Binding(
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }

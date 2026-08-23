@@ -1099,12 +1099,10 @@ public partial class MainWindow : Window
     {
         BusyText.Text = message;
         BusyOverlay.Visibility = Visibility.Visible;
-        IsEnabled = false;
         try { await action(); }
         catch (Exception ex) { ShowError(ex); }
         finally
         {
-            IsEnabled = true;
             BusyOverlay.Visibility = Visibility.Collapsed;
         }
     }

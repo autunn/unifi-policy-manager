@@ -458,7 +458,20 @@ struct VisualResourceWorkspaceView: View {
             .padding(16)
         }
         .background(Color(nsColor: .controlBackgroundColor).opacity(0.26))
-        .overlay { if loading { ProgressView("正在读取官方资源…").padding(22).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8)) } }
+        .allowsHitTesting(!loading)
+        .overlay(alignment: .top) {
+            if loading {
+                ProgressView("正在读取官方资源…")
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 13)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 9))
+                    .overlay { RoundedRectangle(cornerRadius: 9).stroke(Color.primary.opacity(0.10)) }
+                    .shadow(color: .black.opacity(0.14), radius: 12, y: 4)
+                    .padding(.top, 12)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: loading)
         .inspector(isPresented: Binding(get: { inspectorItem != nil }, set: { if !$0 { inspectorItem = nil; selectedItemID = nil } })) {
             if let inspectorItem { ResourceInspector(item: inspectorItem, operations: itemOperations, writeReady: model.writeReady) { operation in prepare(operation, item: inspectorItem) } }
         }
