@@ -200,9 +200,10 @@ struct SitePickerView: View {
 
 struct WorkspaceView: View {
     @EnvironmentObject var model: AppModel
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             VStack(spacing: 0) {
                 BrandView(compact: true).padding(.horizontal, 18).padding(.top, 17).padding(.bottom, 22)
                 List(selection: $model.selectedPage) {
@@ -244,7 +245,21 @@ struct WorkspaceView: View {
                     OfficialAPIWorkspaceView(moduleID: (model.selectedPage ?? .apiAll).apiModuleID ?? "all")
                 }
             }
-            .toolbar { WorkspaceToolbar() }
+            .toolbar {
+                ToolbarItem(placement: .navigation) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
+                        }
+                    } label: {
+                        Image(systemName: "sidebar.left")
+                    }
+                    .help(columnVisibility == .detailOnly ? "展开侧边栏（⌃⌘S）" : "折叠侧边栏（⌃⌘S）")
+                    .accessibilityLabel(columnVisibility == .detailOnly ? "展开侧边栏" : "折叠侧边栏")
+                    .keyboardShortcut("s", modifiers: [.command, .control])
+                }
+                WorkspaceToolbar()
+            }
             .safeAreaInset(edge: .bottom) { StatusBar() }
         }
         .navigationSplitViewStyle(.balanced)

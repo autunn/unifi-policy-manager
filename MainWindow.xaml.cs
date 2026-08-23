@@ -32,6 +32,7 @@ public partial class MainWindow : Window
     private PolicyChangePlan? _changePlan;
     private string? _lastChangePlanBackupPath;
     private bool _uiReady;
+    private bool _sidebarCollapsed;
 
     private string SelectedDnsType => (DnsTypeTabs?.SelectedItem as TabItem)?.Tag?.ToString() ?? "NS";
 
@@ -71,6 +72,27 @@ public partial class MainWindow : Window
     {
         if (!_uiReady || (sender as FrameworkElement)?.Tag is not string page) return;
         NavigateTo(page);
+    }
+
+    private void SidebarToggleButton_Click(object sender, RoutedEventArgs e) =>
+        SetSidebarCollapsed(!_sidebarCollapsed);
+
+    private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (WorkspacePanel.Visibility != Visibility.Visible || e.Key != Key.B
+            || (Keyboard.Modifiers & ModifierKeys.Control) == 0) return;
+        SetSidebarCollapsed(!_sidebarCollapsed);
+        e.Handled = true;
+    }
+
+    private void SetSidebarCollapsed(bool collapsed)
+    {
+        _sidebarCollapsed = collapsed;
+        SidebarColumn.Width = collapsed ? new GridLength(0) : new GridLength(238);
+        SidebarBorder.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
+        var action = collapsed ? "展开" : "折叠";
+        SidebarToggleButton.ToolTip = $"{action}侧边栏（Ctrl+B）";
+        System.Windows.Automation.AutomationProperties.SetName(SidebarToggleButton, $"{action}侧边栏");
     }
 
     private void NavigateTo(string page)
