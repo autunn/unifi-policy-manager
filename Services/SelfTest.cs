@@ -193,20 +193,24 @@ public static class SelfTest
             if (main.FindName("RememberApiKeyCheckBox") is null) throw new Exception("Remember API Key checkbox was not loaded.");
             if (main.FindName("ForgetApiKeyButton") is null) throw new Exception("Forget API Key button was not loaded.");
             if (main.FindName("SidebarScrollViewer") is null) throw new Exception("The scrollable sidebar was not loaded.");
-            var sidebarColumn = main.FindName("SidebarColumn") as System.Windows.Controls.ColumnDefinition
-                ?? throw new Exception("The collapsible sidebar column was not loaded.");
-            var sidebarBorder = main.FindName("SidebarBorder") as System.Windows.Controls.Border
-                ?? throw new Exception("The collapsible sidebar surface was not loaded.");
-            var sidebarToggle = main.FindName("SidebarToggleButton") as System.Windows.Controls.Button
-                ?? throw new Exception("The sidebar toggle button was not loaded.");
-            sidebarToggle.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
-            if (sidebarColumn.Width.Value != 0 || sidebarBorder.Visibility != System.Windows.Visibility.Collapsed)
-                throw new Exception("The sidebar did not collapse from its toggle button.");
-            if (System.Windows.Automation.AutomationProperties.GetName(sidebarToggle) != "展开侧边栏")
-                throw new Exception("The collapsed sidebar toggle does not expose the correct accessible action.");
-            sidebarToggle.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
-            if (sidebarColumn.Width.Value != 238 || sidebarBorder.Visibility != System.Windows.Visibility.Visible)
-                throw new Exception("The sidebar did not expand from its toggle button.");
+            var sidebarGroups = new[]
+            {
+                main.FindName("WorkspaceNavGroup") as System.Windows.Controls.Expander,
+                main.FindName("NetworkResourcesNavGroup") as System.Windows.Controls.Expander,
+                main.FindName("PolicySecurityNavGroup") as System.Windows.Controls.Expander,
+                main.FindName("InfrastructureNavGroup") as System.Windows.Controls.Expander
+            };
+            if (sidebarGroups.Any(group => group is null))
+                throw new Exception("One or more independently collapsible sidebar groups were not loaded.");
+            if (sidebarGroups.Any(group => group!.IsExpanded != true))
+                throw new Exception("Sidebar navigation groups must start expanded.");
+            sidebarGroups[1]!.IsExpanded = false;
+            if (sidebarGroups[1]!.IsExpanded || sidebarGroups[0]!.IsExpanded != true
+                || sidebarGroups[2]!.IsExpanded != true || sidebarGroups[3]!.IsExpanded != true)
+                throw new Exception("Collapsing one sidebar group changed another group's expansion state.");
+            sidebarGroups[1]!.IsExpanded = true;
+            if (sidebarGroups.Any(group => group!.IsExpanded != true))
+                throw new Exception("The collapsed sidebar group did not expand independently.");
             if (main.FindName("OfficialApiPage") is not OfficialApiWorkspace apiWorkspace)
                 throw new Exception("The official API workspace was not loaded.");
             apiWorkspace.ShowModule("all");

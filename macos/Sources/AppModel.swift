@@ -78,7 +78,7 @@ enum WorkspacePage: String, CaseIterable, Identifiable {
     }
 }
 
-enum WorkspaceSection: String, CaseIterable, Identifiable {
+enum WorkspaceSection: String, CaseIterable, Identifiable, Hashable {
     case workspace, network, policy, infrastructure
     var id: String { rawValue }
     var title: String {
@@ -90,6 +90,26 @@ enum WorkspaceSection: String, CaseIterable, Identifiable {
         }
     }
     var pages: [WorkspacePage] { WorkspacePage.allCases.filter { $0.section == self } }
+}
+
+struct SidebarExpansionState: Equatable {
+    private var collapsedSections: Set<WorkspaceSection> = []
+
+    func isExpanded(_ section: WorkspaceSection) -> Bool {
+        !collapsedSections.contains(section)
+    }
+
+    mutating func setExpanded(_ expanded: Bool, for section: WorkspaceSection) {
+        if expanded {
+            collapsedSections.remove(section)
+        } else {
+            collapsedSections.insert(section)
+        }
+    }
+
+    mutating func reveal(_ page: WorkspacePage) {
+        collapsedSections.remove(page.section)
+    }
 }
 
 @MainActor

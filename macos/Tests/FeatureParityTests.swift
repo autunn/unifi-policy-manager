@@ -55,6 +55,20 @@ final class FeatureParityTests: XCTestCase {
         XCTAssertEqual(WorkspacePage.apiAll.apiModuleID, "all")
     }
 
+    func testSidebarSectionsExpandAndCollapseIndependently() {
+        var state = SidebarExpansionState()
+        XCTAssertTrue(WorkspaceSection.allCases.allSatisfy(state.isExpanded))
+
+        state.setExpanded(false, for: .network)
+        XCTAssertFalse(state.isExpanded(.network))
+        XCTAssertTrue(state.isExpanded(.workspace))
+        XCTAssertTrue(state.isExpanded(.policy))
+        XCTAssertTrue(state.isExpanded(.infrastructure))
+
+        state.reveal(.apiNetworks)
+        XCTAssertTrue(state.isExpanded(.network))
+    }
+
     @MainActor
     func testDNSTypeTabsContainSevenOfficialTypesAndDriveFiltering() {
         XCTAssertEqual(DNSRecordTypeTab.allCases.map(\.rawValue), ["NS", "A", "AAAA", "CNAME", "MX", "TXT", "SRV"])
