@@ -200,15 +200,15 @@ struct SitePickerView: View {
 
 struct WorkspaceView: View {
     @EnvironmentObject var model: AppModel
-    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var sidebarExpansion = SidebarExpansionState()
 
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
+        NavigationSplitView {
             VStack(spacing: 0) {
                 BrandView(compact: true).padding(.horizontal, 18).padding(.top, 17).padding(.bottom, 22)
                 List(selection: $model.selectedPage) {
                     ForEach(WorkspaceSection.allCases) { section in
-                        Section {
+                        DisclosureGroup(isExpanded: sectionExpansionBinding(section)) {
                             ForEach(section.pages) { page in
                                 Label {
                                     HStack {
@@ -221,9 +221,10 @@ struct WorkspaceView: View {
                                 } icon: { Image(systemName: page.symbol).foregroundStyle(Color.white.opacity(0.72)) }
                                 .tag(page)
                             }
-                        } header: {
+                        } label: {
                             Text(section.title).foregroundStyle(Color.white.opacity(0.42)).font(.caption2.bold())
                         }
+                        .tint(Color.white.opacity(0.52))
                     }
                 }
                 .scrollContentBackground(.hidden)
@@ -246,23 +247,28 @@ struct WorkspaceView: View {
                 }
             }
             .toolbar {
-                ToolbarItem(placement: .navigation) {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.18)) {
-                            columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
-                        }
-                    } label: {
-                        Image(systemName: "sidebar.left")
-                    }
-                    .help(columnVisibility == .detailOnly ? "展开侧边栏（⌃⌘S）" : "折叠侧边栏（⌃⌘S）")
-                    .accessibilityLabel(columnVisibility == .detailOnly ? "展开侧边栏" : "折叠侧边栏")
-                    .keyboardShortcut("s", modifiers: [.command, .control])
-                }
                 WorkspaceToolbar()
             }
             .safeAreaInset(edge: .bottom) { StatusBar() }
         }
         .navigationSplitViewStyle(.balanced)
+        .onChange(of: model.selectedPage) { _, page in
+            guard let page else { return }
+            withAnimation(.easeInOut(duration: 0.16)) {
+                sidebarExpansion.reveal(page)
+            }
+        }
+    }
+
+    private func sectionExpansionBinding(_ section: WorkspaceSection) -> Binding<Bool> {
+        Binding(
+            get: { sidebarExpansion.isExpanded(section) },
+            set: { expanded in
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    sidebarExpansion.setExpanded(expanded, for: section)
+                }
+            }
+        )
     }
 }
 
