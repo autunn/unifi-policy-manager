@@ -36,6 +36,44 @@ enum PolicyKind: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum DNSRecordTypeTab: String, CaseIterable, Identifiable {
+    case forwardDomain = "NS"
+    case a = "A"
+    case aaaa = "AAAA"
+    case cname = "CNAME"
+    case mx = "MX"
+    case txt = "TXT"
+    case srv = "SRV"
+
+    var id: String { rawValue }
+    var title: String { self == .forwardDomain ? "转发域名" : "\(rawValue) 记录" }
+    var shortTitle: String { self == .forwardDomain ? "转发域名" : rawValue }
+    var symbol: String {
+        switch self {
+        case .forwardDomain: return "arrow.triangle.branch"
+        case .a: return "4.circle"
+        case .aaaa: return "6.circle"
+        case .cname: return "link"
+        case .mx: return "envelope"
+        case .txt: return "text.quote"
+        case .srv: return "server.rack"
+        }
+    }
+    var description: String {
+        switch self {
+        case .forwardDomain: return "把匹配域名的 DNS 查询转发到指定上游 DNS 服务器；支持批量新增与批量删除。"
+        case .a: return "将域名解析到 IPv4 地址。"
+        case .aaaa: return "将域名解析到 IPv6 地址。"
+        case .cname: return "将一个别名域名指向另一个规范域名。"
+        case .mx: return "指定负责接收该域名邮件的服务器及优先级。"
+        case .txt: return "保存域名验证、邮件策略或其他文本信息。"
+        case .srv: return "为指定服务声明服务器、端口、优先级与权重。"
+        }
+    }
+
+    func makeDraft() -> DNSRecord { DNSRecord(recordType: rawValue) }
+}
+
 struct DNSRecord: Identifiable, Codable, Hashable {
     var id: String?
     var recordType: String

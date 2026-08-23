@@ -48,7 +48,7 @@ final class AppModel: ObservableObject {
     @Published var references: [PolicyReference] = []
     @Published var writeReady = false
     @Published var search = ""
-    @Published var dnsTypeFilter = "全部"
+    @Published var selectedDNSType: DNSRecordTypeTab = .forwardDomain
     @Published var lastBackupURL: URL?
     @Published var batchDNSServer = ""
     @Published var batchEditorText = DNSImportService.editorHeader
@@ -77,10 +77,14 @@ final class AppModel: ObservableObject {
 
     var filteredDNS: [DNSRecord] {
         dnsRecords.filter { record in
-            let matchesType = dnsTypeFilter == "全部" || record.recordType == dnsTypeFilter
+            let matchesType = record.recordType == selectedDNSType.rawValue
             let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
             return matchesType && (query.isEmpty || [record.key, record.value, record.recordType].contains { $0.localizedCaseInsensitiveContains(query) })
         }
+    }
+
+    func dnsCount(for type: DNSRecordTypeTab) -> Int {
+        dnsRecords.filter { $0.recordType == type.rawValue }.count
     }
 
     func filteredPolicies(_ kind: PolicyKind) -> [PolicyRule] {

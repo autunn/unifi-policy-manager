@@ -395,21 +395,35 @@ struct DNSView: View {
             HStack(alignment: .bottom, spacing: 12) {
                 PageHeader(title: "DNS 记录", subtitle: "管理转发域名、A、AAAA、CNAME、MX、TXT 与 SRV。")
                 Spacer()
-                Picker("类型", selection: $model.dnsTypeFilter) {
-                    ForEach(["全部", "NS", "A", "AAAA", "CNAME", "MX", "TXT", "SRV"], id: \.self) { Text($0 == "NS" ? "转发域名" : $0) }
-                }
-                .labelsHidden()
-                .frame(width: 130)
                 SearchField(text: $model.search)
-                Button(role: .destructive) { confirmingBatchDelete = true } label: {
-                    Label("删除转发域（\(selectedForwardIDs.count)）", systemImage: "trash")
+                if model.selectedDNSType == .forwardDomain {
+                    Button(role: .destructive) { confirmingBatchDelete = true } label: {
+                        Label("删除转发域（\(selectedForwardIDs.count)）", systemImage: "trash")
+                    }
+                    .disabled(selectedForwardIDs.isEmpty || !model.writeReady)
                 }
-                .disabled(selectedForwardIDs.isEmpty || !model.writeReady)
-                Button { editingRecord = nil; showingEditor = true } label: { Label("新增记录", systemImage: "plus") }
+                Button { editingRecord = nil; showingEditor = true } label: {
+                    Label("新增 \(model.selectedDNSType.shortTitle)", systemImage: "plus")
+                }
                     .buttonStyle(.borderedProminent)
                     .disabled(!model.writeReady)
             }
             .padding(20)
+
+            DNSTypeTabBar()
+                .padding(.horizontal, 20)
+
+            HStack(spacing: 8) {
+                Image(systemName: model.selectedDNSType.symbol).foregroundStyle(.tint)
+                Text(model.selectedDNSType.description).foregroundStyle(.secondary)
+                Spacer()
+                Text("显示 \(model.filteredDNS.count) / \(model.dnsCount(for: model.selectedDNSType))")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            .font(.callout)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
 
             DNSBatchPanel(selectedForwardIDs: $selectedForwardIDs)
                 .padding(.horizontal, 20)
@@ -447,10 +461,22 @@ struct DNSView: View {
             }
             .alternatingRowBackgrounds(.enabled)
             .overlay {
-                if model.filteredDNS.isEmpty { ContentUnavailableView("没有 DNS 记录", systemImage: "network.slash", description: Text("调整筛选条件或新增一条记录。")) }
+                if model.filteredDNS.isEmpty {
+                    ContentUnavailableView(
+                        model.search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            ? "还没有\(model.selectedDNSType.title)"
+                            : "未找到匹配的\(model.selectedDNSType.title)",
+                        systemImage: model.selectedDNSType.symbol,
+                        description: Text(model.search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            ? "可新增第一条记录；批量规则请使用上方可折叠操作面板。"
+                            : "请调整搜索条件后重试。")
+                    )
+                }
             }
         }
-        .sheet(isPresented: $showingEditor) { DNSRecordEditor(record: editingRecord) { model.saveDNS($0) } }
+        .sheet(isPresented: $showingEditor) {
+            DNSRecordEditor(record: editingRecord, initialType: model.selectedDNSType) { model.saveDNS($0) }
+        }
         .alert("删除 DNS 记录？", isPresented: Binding(get: { deletingRecord != nil }, set: { if !$0 { deletingRecord = nil } })) {
             Button("取消", role: .cancel) { deletingRecord = nil }
             Button("删除", role: .destructive) { if let record = deletingRecord { model.deleteDNS(record) }; deletingRecord = nil }
@@ -463,6 +489,47 @@ struct DNSView: View {
                 selectedForwardIDs.removeAll()
             }
         } message: { Text("只会删除选中的转发域名。执行前会保存完整实时策略快照。") }
+    }
+}
+
+private struct DNSTypeTabBar: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 2) {
+                ForEach(DNSRecordTypeTab.allCases) { type in
+                    Button {
+                        model.selectedDNSType = type
+                    } label: {
+                        HStack(spacing: 7) {
+                            Text(type.shortTitle).fontWeight(.semibold)
+                            Text("\(model.dnsCount(for: type))")
+                                .font(.caption2.bold().monospacedDigit())
+                                .foregroundStyle(model.selectedDNSType == type ? Color.accentColor : Color.secondary)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 2)
+                                .background((model.selectedDNSType == type ? Color.accentColor : Color.secondary).opacity(0.10), in: Capsule())
+                        }
+                        .foregroundStyle(model.selectedDNSType == type ? Color.accentColor : Color.primary)
+                        .padding(.horizontal, 15)
+                        .padding(.vertical, 12)
+                        .contentShape(Rectangle())
+                        .background(model.selectedDNSType == type ? Color.accentColor.opacity(0.07) : Color.clear)
+                        .overlay(alignment: .bottom) {
+                            Rectangle()
+                                .fill(model.selectedDNSType == type ? Color.accentColor : Color.clear)
+                                .frame(height: 3)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(type.shortTitle)，\(model.dnsCount(for: type)) 条")
+                    .accessibilityAddTraits(model.selectedDNSType == type ? .isSelected : [])
+                }
+            }
+        }
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 9))
+        .overlay { RoundedRectangle(cornerRadius: 9).stroke(Color.primary.opacity(0.10)) }
     }
 }
 
@@ -509,8 +576,8 @@ struct DNSRecordEditor: View {
     let onSave: (DNSRecord) -> Void
     private let types = ["NS", "A", "AAAA", "CNAME", "MX", "TXT", "SRV"]
 
-    init(record: DNSRecord?, onSave: @escaping (DNSRecord) -> Void) {
-        _draft = State(initialValue: record ?? DNSRecord())
+    init(record: DNSRecord?, initialType: DNSRecordTypeTab = .forwardDomain, onSave: @escaping (DNSRecord) -> Void) {
+        _draft = State(initialValue: record ?? initialType.makeDraft())
         self.onSave = onSave
     }
 
@@ -580,12 +647,39 @@ private struct OptionalIntegerField: View {
     var body: some View { TextField(label, value: $value, format: .number).textFieldStyle(.roundedBorder) }
 }
 
+private enum PolicyOriginFilter: String, CaseIterable, Identifiable {
+    case all
+    case user
+    case system
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .all: return "全部"
+        case .user: return "用户定义"
+        case .system: return "系统与派生"
+        }
+    }
+    func includes(_ rule: PolicyRule) -> Bool {
+        switch self {
+        case .all: return true
+        case .user: return rule.canModify
+        case .system: return !rule.canModify
+        }
+    }
+}
+
 struct PolicyListView: View {
     @EnvironmentObject var model: AppModel
     let kind: PolicyKind
     @State private var editingRule: PolicyRule?
     @State private var showingEditor = false
     @State private var deletingRule: PolicyRule?
+    @State private var originFilter: PolicyOriginFilter = .all
+
+    private var allRules: [PolicyRule] { kind == .acl ? model.aclRules : model.firewallRules }
+    private var visibleRules: [PolicyRule] { model.filteredPolicies(kind).filter(originFilter.includes) }
+    private func count(for filter: PolicyOriginFilter) -> Int { allRules.filter(filter.includes).count }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -596,7 +690,25 @@ struct PolicyListView: View {
                 Button { editingRule = nil; showingEditor = true } label: { Label("新增策略", systemImage: "plus") }.buttonStyle(.borderedProminent).disabled(!model.writeReady)
             }.padding(20)
             Divider()
-            Table(model.filteredPolicies(kind)) {
+            HStack(spacing: 12) {
+                Picker("规则来源", selection: $originFilter) {
+                    ForEach(PolicyOriginFilter.allCases) { filter in
+                        Text("\(filter.title) \(count(for: filter))").tag(filter)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 430)
+                Text("当前显示 \(visibleRules.count) 条；系统与派生策略保持只读。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
+            .background(Color(nsColor: .controlBackgroundColor))
+            Divider()
+            Table(visibleRules) {
                 TableColumn("状态") { rule in StatusPill(enabled: rule.enabled) }.width(70)
                 TableColumn("名称") { rule in Text(rule.name).fontWeight(.medium).lineLimit(1) }.width(min: 180, ideal: 280)
                 TableColumn(kind == .acl ? "类型" : "IP 范围") { rule in Text(rule.type) }.width(110)
@@ -613,7 +725,15 @@ struct PolicyListView: View {
                 }.width(155)
             }
             .alternatingRowBackgrounds(.enabled)
-            .overlay { if model.filteredPolicies(kind).isEmpty { ContentUnavailableView("没有策略", systemImage: "shield.slash", description: Text("调整搜索条件或新增用户策略。")) } }
+            .overlay {
+                if visibleRules.isEmpty {
+                    ContentUnavailableView(
+                        "当前筛选没有\(kind.title)策略",
+                        systemImage: "shield.slash",
+                        description: Text("切换上方来源分段，或调整搜索条件。")
+                    )
+                }
+            }
         }
         .sheet(isPresented: $showingEditor) { PolicyJSONEditor(kind: kind, rule: editingRule) { json in model.savePolicy(kind: kind, existing: editingRule, json: json) } }
         .alert("删除策略？", isPresented: Binding(get: { deletingRule != nil }, set: { if !$0 { deletingRule = nil } })) {

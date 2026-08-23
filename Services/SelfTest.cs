@@ -127,7 +127,25 @@ public static class SelfTest
             if (main.FindName("ChangePlanGrid") is null) throw new Exception("Policy change plan grid was not loaded.");
             if (main.FindName("RememberApiKeyCheckBox") is null) throw new Exception("Remember API Key checkbox was not loaded.");
             if (main.FindName("ForgetApiKeyButton") is null) throw new Exception("Forget API Key button was not loaded.");
+            var dnsTabs = main.FindName("DnsTypeTabs") as System.Windows.Controls.TabControl
+                ?? throw new Exception("DNS type tab navigation was not loaded.");
+            if (dnsTabs.Items.Count != DnsTypes.All.Length) throw new Exception("DNS type navigation must contain exactly seven tabs.");
+            var tabTypes = dnsTabs.Items.Cast<System.Windows.Controls.TabItem>().Select(item => item.Tag?.ToString()).ToArray();
+            if (!tabTypes.SequenceEqual(DnsTypes.All)) throw new Exception("DNS tabs are not in the official record-type order.");
+            if (main.FindName("AclUserSegment") is null || main.FindName("AclSystemSegment") is null)
+                throw new Exception("ACL origin segmented navigation was not loaded.");
+            if (main.FindName("FirewallUserSegment") is null || main.FindName("FirewallSystemSegment") is null)
+                throw new Exception("Firewall origin segmented navigation was not loaded.");
             main.Close();
+            foreach (var type in DnsTypes.All)
+            {
+                var editor = new RecordEditorWindow(initialType: type);
+                var typePicker = editor.FindName("TypeComboBox") as System.Windows.Controls.ComboBox
+                    ?? throw new Exception("DNS editor type picker was not loaded.");
+                var selectedType = (typePicker.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Tag?.ToString();
+                if (selectedType != type) throw new Exception($"DNS editor did not inherit the {type} tab.");
+                editor.Close();
+            }
             foreach (var record in AllRecordTypes())
             {
                 var editor = new RecordEditorWindow(DnsValidator.Normalize(record));

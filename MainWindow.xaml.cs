@@ -33,6 +33,8 @@ public partial class MainWindow : Window
     private string? _lastChangePlanBackupPath;
     private bool _uiReady;
 
+    private string SelectedDnsType => (DnsTypeTabs?.SelectedItem as TabItem)?.Tag?.ToString() ?? "NS";
+
     public MainWindow(bool demoMode = false)
     {
         InitializeComponent();
@@ -257,12 +259,22 @@ public partial class MainWindow : Window
     private bool FilterRecord(object item)
     {
         if (item is not DnsRecord record) return false;
-        var type = (TypeFilterComboBox?.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "ALL";
-        if (type != "ALL" && record.RecordType != type) return false;
+        if (!string.Equals(record.RecordType, SelectedDnsType, StringComparison.OrdinalIgnoreCase)) return false;
         var search = SearchTextBox?.Text.Trim() ?? string.Empty;
         if (search.Length == 0) return true;
         return new[] { record.Id, record.RecordType, record.Key, record.Value, record.Service, record.Protocol }
             .Any(value => (value ?? string.Empty).Contains(search, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void DnsTypeTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_uiReady || e.Source != DnsTypeTabs) return;
+        var isForwardDomain = SelectedDnsType == "NS";
+        BatchSelectColumn.Visibility = isForwardDomain ? Visibility.Visible : Visibility.Collapsed;
+        BatchDeleteButton.Visibility = isForwardDomain ? Visibility.Visible : Visibility.Collapsed;
+        _view?.Refresh();
+        UpdateStatistics();
+        UpdateBatchSelectionState();
     }
 
     private void Filter_Changed(object sender, EventArgs e)
@@ -276,13 +288,44 @@ public partial class MainWindow : Window
     private bool FilterPolicy(object item, OfficialPolicyKind kind)
     {
         if (item is not OfficialPolicyRule rule) return false;
+        var origin = SelectedPolicyOrigin(kind);
+        if (origin == "USER" && !rule.CanModify) return false;
+        if (origin == "SYSTEM" && rule.CanModify) return false;
         var search = kind == OfficialPolicyKind.Acl ? AclSearchTextBox?.Text.Trim() : FirewallSearchTextBox?.Text.Trim();
         if (string.IsNullOrWhiteSpace(search)) return true;
         return new[] { rule.Id, rule.Name, rule.Type, rule.Action, rule.Origin, rule.Description }
             .Any(value => value.Contains(search, StringComparison.OrdinalIgnoreCase));
     }
 
+    private string SelectedPolicyOrigin(OfficialPolicyKind kind)
+    {
+        if (kind == OfficialPolicyKind.Acl)
+        {
+            if (AclUserSegment?.IsChecked == true) return "USER";
+            if (AclSystemSegment?.IsChecked == true) return "SYSTEM";
+            return "ALL";
+        }
+        if (FirewallUserSegment?.IsChecked == true) return "USER";
+        if (FirewallSystemSegment?.IsChecked == true) return "SYSTEM";
+        return "ALL";
+    }
+
+    private static string PolicyOriginLabel(string origin) => origin switch
+    {
+        "USER" => "用户定义",
+        "SYSTEM" => "系统与派生",
+        _ => "全部来源"
+    };
+
     private void PolicyFilter_Changed(object sender, TextChangedEventArgs e)
+    {
+        if (!_uiReady) return;
+        _aclView?.Refresh();
+        _firewallView?.Refresh();
+        UpdatePolicyStatistics();
+    }
+
+    private void PolicyOriginFilter_Changed(object sender, RoutedEventArgs e)
     {
         if (!_uiReady) return;
         _aclView?.Refresh();
@@ -299,18 +342,57 @@ public partial class MainWindow : Window
         MxCount.Text = _records.Count(record => record.RecordType == "MX").ToString();
         TxtCount.Text = _records.Count(record => record.RecordType == "TXT").ToString();
         SrvCount.Text = _records.Count(record => record.RecordType == "SRV").ToString();
+        var selectedType = SelectedDnsType;
+        var typeTitle = DnsTypeTitle(selectedType);
+        var typeCount = _records.Count(record => record.RecordType == selectedType);
         var displayed = _view?.Cast<DnsRecord>().Count() ?? _records.Count;
-        RecordSummaryText.Text = $"共 {_records.Count} 条，当前显示 {displayed} 条；仅转发域名可多选批量删除。";
+        CurrentDnsTypeTitle.Text = typeTitle;
+        DnsTypeDescriptionText.Text = DnsTypeDescription(selectedType);
+        DnsTotalCountText.Text = $"共 {_records.Count} 条记录";
+        RecordSummaryText.Text = $"{typeTitle}共 {typeCount} 条，当前显示 {displayed} 条。";
+        AddDnsRecordButton.Content = $"新增 {typeTitle}";
+        var hasSearch = !string.IsNullOrWhiteSpace(SearchTextBox?.Text);
+        DnsEmptyStateTitle.Text = hasSearch ? $"未找到匹配的{typeTitle}" : $"还没有{typeTitle}";
+        DnsEmptyStateDescription.Text = hasSearch
+            ? "请调整搜索条件后重试。"
+            : selectedType == "NS"
+                ? "可新增一条记录，或使用上方批量操作面板导入规则。"
+                : $"点击“新增 {typeTitle}”创建第一条记录。";
+        DnsEmptyState.Visibility = displayed == 0 ? Visibility.Visible : Visibility.Collapsed;
         DnsTabHeaderText.Text = $"DNS 记录 ({_records.Count})";
         UpdateDashboardStatistics();
     }
+
+    private static string DnsTypeTitle(string type) => type == "NS" ? "转发域名" : $"{type} 记录";
+
+    private static string DnsTypeDescription(string type) => type switch
+    {
+        "NS" => "把匹配域名的 DNS 查询转发到指定上游 DNS 服务器；支持批量新增与批量删除。",
+        "A" => "将域名解析到 IPv4 地址。",
+        "AAAA" => "将域名解析到 IPv6 地址。",
+        "CNAME" => "将一个别名域名指向另一个规范域名。",
+        "MX" => "指定负责接收该域名邮件的服务器及优先级。",
+        "TXT" => "保存域名验证、邮件策略或其他文本信息。",
+        "SRV" => "为指定服务声明服务器、端口、优先级与权重。",
+        _ => "管理 DNS 记录。"
+    };
 
     private void UpdatePolicyStatistics()
     {
         var aclDisplayed = _aclView?.Cast<OfficialPolicyRule>().Count() ?? _aclRules.Count;
         var firewallDisplayed = _firewallView?.Cast<OfficialPolicyRule>().Count() ?? _firewallRules.Count;
-        AclSummaryText.Text = $"共 {_aclRules.Count} 条，显示 {aclDisplayed} 条；系统/派生规则只读。";
-        FirewallSummaryText.Text = $"共 {_firewallRules.Count} 条，显示 {firewallDisplayed} 条；系统/派生规则只读。";
+        var aclUserCount = _aclRules.Count(rule => rule.CanModify);
+        var firewallUserCount = _firewallRules.Count(rule => rule.CanModify);
+        AclAllSegment.Content = $"全部 {_aclRules.Count}";
+        AclUserSegment.Content = $"用户定义 {aclUserCount}";
+        AclSystemSegment.Content = $"系统与派生 {_aclRules.Count - aclUserCount}";
+        FirewallAllSegment.Content = $"全部 {_firewallRules.Count}";
+        FirewallUserSegment.Content = $"用户定义 {firewallUserCount}";
+        FirewallSystemSegment.Content = $"系统与派生 {_firewallRules.Count - firewallUserCount}";
+        AclSummaryText.Text = $"{PolicyOriginLabel(SelectedPolicyOrigin(OfficialPolicyKind.Acl))}显示 {aclDisplayed} 条；系统/派生规则只读。";
+        FirewallSummaryText.Text = $"{PolicyOriginLabel(SelectedPolicyOrigin(OfficialPolicyKind.Firewall))}显示 {firewallDisplayed} 条；系统/派生规则只读。";
+        AclEmptyState.Visibility = aclDisplayed == 0 ? Visibility.Visible : Visibility.Collapsed;
+        FirewallEmptyState.Visibility = firewallDisplayed == 0 ? Visibility.Visible : Visibility.Collapsed;
         AclTabHeaderText.Text = $"ACL 规则 ({_aclRules.Count})";
         FirewallTabHeaderText.Text = $"防火墙 ({_firewallRules.Count})";
         UpdateDashboardStatistics();
@@ -330,7 +412,7 @@ public partial class MainWindow : Window
 
     private void AddButton_Click(object sender, RoutedEventArgs e)
     {
-        var editor = new RecordEditorWindow { Owner = this };
+        var editor = new RecordEditorWindow(initialType: SelectedDnsType) { Owner = this };
         if (editor.ShowDialog() == true && editor.Result is not null) _ = CreateRecordAsync(editor.Result);
     }
 
@@ -849,7 +931,7 @@ public partial class MainWindow : Window
 
     private void SelectVisibleForwardDomainsButton_Click(object sender, RoutedEventArgs e)
     {
-        foreach (var record in _view?.Cast<DnsRecord>().Where(record => record.IsForwardDomain) ?? []) record.IsSelectedForBatch = true;
+        foreach (var record in _records.Where(record => record.IsForwardDomain)) record.IsSelectedForBatch = true;
         UpdateBatchSelectionState();
     }
 
@@ -864,11 +946,12 @@ public partial class MainWindow : Window
         if (!_uiReady || BatchDeleteButton is null || BatchDeletePanelButton is null || BatchDeleteSelectionText is null || SelectAllCheckBox is null) return;
         var selected = _records.Count(record => record.IsForwardDomain && record.IsSelectedForBatch);
         BatchDeleteButton.Content = $"批量删除转发域名 ({selected})";
-        BatchDeleteButton.IsEnabled = selected > 0;
+        BatchDeleteButton.IsEnabled = selected > 0 && SelectedDnsType == "NS";
         BatchDeletePanelButton.Content = $"批量删除转发域名 ({selected})";
         BatchDeletePanelButton.IsEnabled = selected > 0;
         var visible = _view?.Cast<DnsRecord>().Where(record => record.IsForwardDomain).ToList() ?? [];
-        BatchDeleteSelectionText.Text = $"当前列表显示 {visible.Count} 条转发域名，已选择 {selected} 条。批量删除会先预览并保存完整 DNS 快照。";
+        var total = _records.Count(record => record.IsForwardDomain);
+        BatchDeleteSelectionText.Text = $"共有 {total} 条转发域名，当前列表显示 {visible.Count} 条，已选择 {selected} 条。批量删除会先预览并保存完整 DNS 快照。";
         SelectAllCheckBox.IsChecked = visible.Count > 0 && visible.All(record => record.IsSelectedForBatch);
     }
 

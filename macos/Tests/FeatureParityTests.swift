@@ -3,6 +3,25 @@ import XCTest
 @testable import UniFiPolicyManagerMac
 
 final class FeatureParityTests: XCTestCase {
+    @MainActor
+    func testDNSTypeTabsContainSevenOfficialTypesAndDriveFiltering() {
+        XCTAssertEqual(DNSRecordTypeTab.allCases.map(\.rawValue), ["NS", "A", "AAAA", "CNAME", "MX", "TXT", "SRV"])
+        for type in DNSRecordTypeTab.allCases {
+            XCTAssertEqual(type.makeDraft().recordType, type.rawValue)
+        }
+
+        let model = AppModel()
+        model.dnsRecords = [
+            DNSRecord(recordType: "NS", key: "forward.example.com", value: "192.168.1.10"),
+            DNSRecord(recordType: "A", key: "a.example.com", value: "192.0.2.10"),
+            DNSRecord(recordType: "A", key: "b.example.com", value: "192.0.2.11")
+        ]
+        model.selectedDNSType = .a
+
+        XCTAssertEqual(model.dnsCount(for: .a), 2)
+        XCTAssertEqual(model.filteredDNS.map(\.recordType), ["A", "A"])
+    }
+
     func testDNSBatchParserSupportsAllOfficialTypesAndDeduplicates() throws {
         let csv = """
         类型,域名,值或服务器,TTL,优先级,权重,端口,服务,协议,启用
