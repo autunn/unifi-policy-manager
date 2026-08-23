@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using UniFiDnsManager.Models;
 
@@ -24,13 +26,21 @@ public static class OfficialResourcePresentationService
         var elements = ExtractResourceElements(document.RootElement);
         var items = elements
             .Where(element => element.ValueKind == JsonValueKind.Object)
-            .Select((element, index) => BuildItem(element, moduleId, index))
+            .Select(element => BuildItem(element, moduleId))
             .ToList();
 
-        var total = ReadTotalCount(document.RootElement) ?? items.Count;
-        var hasExplicitHealth = items.Any(item => item.State != "未知");
-        var healthy = hasExplicitHealth ? items.Count(item => item.IsHealthy) : items.Count;
-        var attention = items.Count(item => item.NeedsAttention);
+        var reportedTotal = ReadTotalCount(document.RootElement);
+        return CreateSnapshot(items, Math.Max(reportedTotal ?? items.Count, items.Count), reportedTotal.HasValue);
+    }
+
+    public static OfficialResourceSnapshot CreateSnapshot(
+        IReadOnlyList<OfficialResourceItem> items,
+        int? totalCount = null,
+        bool hasReportedTotalCount = false)
+    {
+        var hasExplicitHealth = items.Any(item => item.HasHealthData);
+        var healthy = items.Count(item => item.HasHealthData && item.IsHealthy);
+        var attention = items.Count(item => item.HasHealthData && item.NeedsAttention);
         var grouped = items
             .GroupBy(item => string.IsNullOrWhiteSpace(item.Type) ? "其他" : item.Type)
             .OrderByDescending(group => group.Count())
@@ -41,10 +51,12 @@ public static class OfficialResourcePresentationService
         return new OfficialResourceSnapshot
         {
             Items = items,
-            TotalCount = Math.Max(total, items.Count),
+            TotalCount = Math.Max(totalCount ?? items.Count, items.Count),
             HealthyCount = healthy,
             AttentionCount = attention,
             TypeCount = grouped.Count,
+            HasHealthData = hasExplicitHealth,
+            HasReportedTotalCount = hasReportedTotalCount,
             TypeDistribution = grouped.Select(group => new OfficialResourceDistributionItem(
                 group.Key,
                 group.Count(),
@@ -60,6 +72,7 @@ public static class OfficialResourcePresentationService
             Name = "操作结果",
             State = "已完成",
             IsHealthy = true,
+            HasHealthData = true,
             Glyph = GlyphFor(moduleId, ""),
             RawJson = json,
             Fields = [new OfficialResourceField("结果", "请求已成功完成")]
@@ -87,12 +100,13 @@ public static class OfficialResourcePresentationService
         return [root.Clone()];
     }
 
-    private static OfficialResourceItem BuildItem(JsonElement element, string moduleId, int index)
+    private static OfficialResourceItem BuildItem(JsonElement element, string moduleId)
     {
         var flattened = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         Flatten(element, "", flattened, 0);
-        var id = Candidate(flattened, "id", "deviceId", "clientId", "networkId", "wifiBroadcastId", "voucherId", "macAddress")
-            ?? $"resource-{index + 1}";
+        var id = Candidate(flattened, "id", "deviceId", "clientId", "networkId", "wifiBroadcastId", "voucherId", "macAddress",
+                "code", "slug", "internalReference", "name", "displayName")
+            ?? ContentFingerprint(element);
         var name = Candidate(flattened, "name", "displayName", "hostname", "deviceName", "ssid", "code", "internalReference")
             ?? id;
         var stateRaw = Candidate(flattened, "status", "state", "connectionState", "adoptionState", "enabled");
@@ -132,9 +146,16 @@ public static class OfficialResourcePresentationService
             StateColor = attention ? "#D97706" : healthy ? "#37BE5F" : "#98A2B3",
             IsHealthy = healthy,
             NeedsAttention = attention,
+            HasHealthData = !string.IsNullOrWhiteSpace(stateRaw),
             RawJson = element.GetRawText(),
             Fields = fields
         };
+    }
+
+    private static string ContentFingerprint(JsonElement element)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(element.GetRawText()));
+        return $"resource-{Convert.ToHexString(hash.AsSpan(0, 8)).ToLowerInvariant()}";
     }
 
     private static void Flatten(JsonElement element, string prefix, IDictionary<string, string> output, int depth)

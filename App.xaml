@@ -39,6 +39,10 @@
             <Setter Property="Padding" Value="9,7"/>
             <Setter Property="BorderBrush" Value="#CBD5E1"/>
             <Setter Property="Background" Value="White"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Cursor" Value="Hand"/>
         </Style>
 
         <Style TargetType="Button">
@@ -348,6 +352,7 @@
         </Style>
         <Style TargetType="DataGridRow">
             <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Cursor" Value="Hand"/>
         </Style>
     </Application.Resources>
 </Application>

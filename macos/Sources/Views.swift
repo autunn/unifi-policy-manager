@@ -219,10 +219,11 @@ struct WorkspaceView: View {
                                         if page == .firewall { Text("\(model.firewallRules.count)") }
                                     }.foregroundStyle(.white)
                                 } icon: { Image(systemName: page.symbol).foregroundStyle(Color.white.opacity(0.72)) }
+                                .pointingHandOnHover()
                                 .tag(page)
                             }
                         } label: {
-                            Text(section.title).foregroundStyle(Color.white.opacity(0.42)).font(.caption2.bold())
+                            Text(section.title).foregroundStyle(Color.white.opacity(0.42)).font(.caption2.bold()).pointingHandOnHover()
                         }
                         .tint(Color.white.opacity(0.52))
                     }

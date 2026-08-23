@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using UniFiDnsManager.Models;
 using UniFiDnsManager.Services;
@@ -12,14 +13,17 @@ public partial class VisualResourceWorkspace : UserControl
 {
     private readonly ObservableCollection<OfficialApiOperation> _listOperations = [];
     private readonly ObservableCollection<OfficialApiOperation> _otherOperations = [];
+    private readonly ObservableCollection<OfficialApiOperation> _contextOperations = [];
     private readonly ObservableCollection<OfficialResourceItem> _visibleItems = [];
     private readonly ObservableCollection<OfficialResourceDistributionItem> _distribution = [];
     private IReadOnlyList<OfficialResourceItem> _allItems = [];
+    private IReadOnlyList<OfficialApiOperation> _moduleOperations = [];
     private IUniFiClient? _client;
     private string _moduleId = "devices";
     private OfficialApiOperation? _primaryOperation;
     private OfficialResourceItem? _selectedItem;
     private bool _changingModule;
+    private int _loadVersion;
 
     public event EventHandler<string>? StatusChanged;
 
@@ -30,6 +34,7 @@ public partial class VisualResourceWorkspace : UserControl
         OperationComboBox.ItemsSource = _otherOperations;
         ResourceGrid.ItemsSource = _visibleItems;
         TypeDistributionList.ItemsSource = _distribution;
+        DrawerActionsList.ItemsSource = _contextOperations;
     }
 
     public void SetClient(IUniFiClient? client)
@@ -42,7 +47,7 @@ public partial class VisualResourceWorkspace : UserControl
     {
         if (string.Equals(_moduleId, moduleId, StringComparison.OrdinalIgnoreCase) && _listOperations.Count > 0)
         {
-            if (_client is not null && _allItems.Count == 0) await LoadSelectedListAsync();
+            if (_client is not null) await LoadSelectedListAsync();
             return;
         }
 
@@ -53,30 +58,22 @@ public partial class VisualResourceWorkspace : UserControl
         _allItems = [];
         _visibleItems.Clear();
         _distribution.Clear();
+        _contextOperations.Clear();
         DrawerLayer.Visibility = Visibility.Collapsed;
 
-        var operations = OfficialApiCatalog.ForModule(moduleId).ToList();
-        foreach (var operation in operations.Where(IsAutomaticListOperation)) _listOperations.Add(operation);
+        _moduleOperations = OfficialApiCatalog.ForModule(moduleId).ToList();
+        foreach (var operation in _moduleOperations.Where(IsAutomaticListOperation)) _listOperations.Add(operation);
         if (_listOperations.Count == 0)
         {
-            var firstGet = operations.FirstOrDefault(operation => operation.Method == "GET");
+            var firstGet = _moduleOperations.FirstOrDefault(operation => operation.Method == "GET");
             if (firstGet is not null) _listOperations.Add(firstGet);
         }
 
-        _primaryOperation = operations.FirstOrDefault(IsPrimaryCreateOperation);
-        foreach (var operation in operations.Where(operation => !_listOperations.Contains(operation) && operation != _primaryOperation))
-            _otherOperations.Add(operation);
-        OperationComboBox.SelectedIndex = _otherOperations.Count > 0 ? 0 : -1;
-        PrimaryActionButton.Visibility = _primaryOperation is null ? Visibility.Collapsed : Visibility.Visible;
-        if (_primaryOperation is not null) PrimaryActionButton.Content = _primaryOperation.Title;
-        RunOperationButton.IsEnabled = _otherOperations.Count > 0;
-        OperationComboBox.Visibility = _otherOperations.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-        RunOperationButton.Visibility = _otherOperations.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         TotalGlyphText.Text = GlyphForModule(moduleId);
         ResourceSearchTextBox.Text = "";
         ResourceTabList.SelectedIndex = _listOperations.Count > 0 ? 0 : -1;
         _changingModule = false;
-        UpdateActionState();
+        ConfigureSelectedListActions();
         await LoadSelectedListAsync();
     }
 
@@ -87,36 +84,58 @@ public partial class VisualResourceWorkspace : UserControl
         return operation.RequiredQueries.All(name => defaults.TryGetValue(name, out var value) && !string.IsNullOrWhiteSpace(value));
     }
 
-    private static bool IsPrimaryCreateOperation(OfficialApiOperation operation)
-    {
-        if (!operation.IsWrite || operation.PathParameters.Count > 0) return false;
-        return operation.Id.StartsWith("create", StringComparison.OrdinalIgnoreCase)
-            || operation.Id.Equals("adoptDevice", StringComparison.OrdinalIgnoreCase);
-    }
-
     private async void ResourceTabList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_changingModule || ResourceTabList.SelectedItem is not OfficialApiOperation) return;
+        ConfigureSelectedListActions();
         await LoadSelectedListAsync();
+    }
+
+    private async void ResourceTabList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (_changingModule || e.OriginalSource is not DependencyObject source) return;
+        if (ItemsControl.ContainerFromElement(ResourceTabList, source) is not ListBoxItem tab
+            || tab.Content is not OfficialApiOperation operation
+            || ResourceTabList.SelectedItem is not OfficialApiOperation selected
+            || !operation.Id.Equals(selected.Id, StringComparison.Ordinal)) return;
+        await LoadSelectedListAsync();
+    }
+
+    private void ConfigureSelectedListActions()
+    {
+        var listOperation = ResourceTabList.SelectedItem as OfficialApiOperation;
+        _primaryOperation = OfficialResourceInteractionService.FindPrimaryOperation(listOperation, _moduleOperations);
+        _otherOperations.Clear();
+        foreach (var operation in OfficialResourceInteractionService.FindCollectionOperations(listOperation, _moduleOperations, _primaryOperation))
+            _otherOperations.Add(operation);
+        OperationComboBox.SelectedIndex = _otherOperations.Count > 0 ? 0 : -1;
+        PrimaryActionButton.Visibility = _primaryOperation is null ? Visibility.Collapsed : Visibility.Visible;
+        if (_primaryOperation is not null) PrimaryActionButton.Content = _primaryOperation.Title;
+        OperationComboBox.Visibility = _otherOperations.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        RunOperationButton.Visibility = _otherOperations.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        UpdateActionState();
     }
 
     private async Task LoadSelectedListAsync()
     {
         if (_client is null || ResourceTabList.SelectedItem is not OfficialApiOperation operation) return;
+        var loadVersion = ++_loadVersion;
         try
         {
             SetLoading(true, $"正在读取{operation.Title.Replace("列出", "", StringComparison.Ordinal)}…");
-            var path = operation.ResolvePath(_client.SiteId, new Dictionary<string, string>());
-            if (!string.IsNullOrWhiteSpace(operation.DefaultQuery)) path += $"?{operation.DefaultQuery.Trim().TrimStart('?')}";
-            var response = await _client.ExecuteOfficialApiAsync("GET", path);
-            var snapshot = OfficialResourcePresentationService.Parse(response, _moduleId);
+            var snapshot = await LoadAllPagesAsync(operation, loadVersion);
+            if (loadVersion != _loadVersion) return;
             _allItems = snapshot.Items;
+            _selectedItem = null;
+            ResourceGrid.SelectedItem = null;
+            DrawerLayer.Visibility = Visibility.Collapsed;
             UpdateSnapshot(snapshot);
             ApplyFilter();
             StatusChanged?.Invoke(this, $"已读取 {snapshot.Items.Count} 条{operation.Title.Replace("列出", "", StringComparison.Ordinal)}。" );
         }
         catch (Exception ex)
         {
+            if (loadVersion != _loadVersion) return;
             _allItems = [];
             _visibleItems.Clear();
             UpdateSnapshot(new OfficialResourceSnapshot());
@@ -127,25 +146,70 @@ public partial class VisualResourceWorkspace : UserControl
         }
         finally
         {
-            SetLoading(false, "");
+            if (loadVersion == _loadVersion) SetLoading(false, "");
         }
+    }
+
+    private async Task<OfficialResourceSnapshot> LoadAllPagesAsync(OfficialApiOperation operation, int loadVersion)
+    {
+        var basePath = operation.ResolvePath(_client!.SiteId, new Dictionary<string, string>());
+        if (!OfficialResourceInteractionService.SupportsPaging(operation))
+        {
+            var path = AppendQuery(basePath, operation.DefaultQuery);
+            var response = await _client.ExecuteOfficialApiAsync("GET", path);
+            return OfficialResourcePresentationService.Parse(response, _moduleId);
+        }
+
+        var query = ParseQuery(operation.DefaultQuery);
+        var offset = query.TryGetValue("offset", out var offsetValue) && int.TryParse(offsetValue, out var parsedOffset)
+            ? Math.Max(0, parsedOffset)
+            : 0;
+        var limit = query.TryGetValue("limit", out var limitValue) && int.TryParse(limitValue, out var parsedLimit)
+            ? Math.Clamp(parsedLimit, 1, 200)
+            : 50;
+        var pages = new List<OfficialResourceSnapshot>();
+        var loadedResponseItems = 0;
+
+        for (var pageNumber = 0; pageNumber < 500; pageNumber++)
+        {
+            var pageQuery = OfficialResourceInteractionService.BuildPageQuery(operation.DefaultQuery, offset, limit);
+            var response = await _client.ExecuteOfficialApiAsync("GET", AppendQuery(basePath, pageQuery));
+            if (loadVersion != _loadVersion) return new OfficialResourceSnapshot();
+            var page = OfficialResourcePresentationService.Parse(response, _moduleId);
+            pages.Add(page);
+            loadedResponseItems += page.Items.Count;
+            if (page.HasReportedTotalCount)
+                LoadingText.Text = $"正在读取{operation.Title.Replace("列出", "", StringComparison.Ordinal)}… {Math.Min(loadedResponseItems, page.TotalCount)} / {page.TotalCount}";
+
+            if (page.Items.Count == 0) break;
+            if (page.HasReportedTotalCount && loadedResponseItems >= page.TotalCount) break;
+            if (!page.HasReportedTotalCount && page.Items.Count < limit) break;
+            offset += page.Items.Count;
+        }
+
+        return OfficialResourceInteractionService.MergePages(pages);
     }
 
     private void UpdateSnapshot(OfficialResourceSnapshot snapshot)
     {
         TotalCountText.Text = snapshot.TotalCount.ToString();
-        HealthyCountText.Text = snapshot.HealthyCount.ToString();
-        AttentionCountText.Text = snapshot.AttentionCount.ToString();
+        HealthyCountText.Text = snapshot.HasHealthData ? snapshot.HealthyCount.ToString() : "—";
+        AttentionCountText.Text = snapshot.HasHealthData ? snapshot.AttentionCount.ToString() : "—";
         TypeCountText.Text = snapshot.TypeCount.ToString();
-        HealthyNoteText.Text = snapshot.TotalCount == 0 ? "0%" : $"{snapshot.HealthyCount * 100 / Math.Max(1, snapshot.TotalCount)}% 可用";
-        var unknown = Math.Max(0, snapshot.TotalCount - snapshot.HealthyCount - snapshot.AttentionCount);
-        foreach (var progress in new[] { HealthyProgress, AttentionProgress, UnknownProgress }) progress.Maximum = Math.Max(1, snapshot.TotalCount);
-        HealthyProgress.Value = snapshot.HealthyCount;
-        AttentionProgress.Value = snapshot.AttentionCount;
-        UnknownProgress.Value = unknown;
-        HealthyProgressText.Text = snapshot.HealthyCount.ToString();
-        AttentionProgressText.Text = snapshot.AttentionCount.ToString();
-        UnknownProgressText.Text = unknown.ToString();
+        HealthyNoteText.Text = snapshot.HasHealthData
+            ? snapshot.TotalCount == 0 ? "0%" : $"{snapshot.HealthyCount * 100 / Math.Max(1, snapshot.Items.Count)}% 可用"
+            : "接口未返回状态";
+        foreach (var progress in new[] { HealthyProgress, AttentionProgress, UnknownProgress }) progress.Maximum = Math.Max(1, snapshot.Items.Count);
+        HealthyProgress.Value = snapshot.HasHealthData ? snapshot.HealthyCount : 0;
+        AttentionProgress.Value = snapshot.HasHealthData ? snapshot.AttentionCount : 0;
+        UnknownProgress.Value = snapshot.HasHealthData ? snapshot.UnknownCount : 0;
+        HealthyProgressText.Text = snapshot.HasHealthData ? snapshot.HealthyCount.ToString() : "—";
+        AttentionProgressText.Text = snapshot.HasHealthData ? snapshot.AttentionCount.ToString() : "—";
+        UnknownProgressText.Text = snapshot.HasHealthData ? snapshot.UnknownCount.ToString() : "—";
+        HealthPanelNoteText.Text = snapshot.HasHealthData ? "实时快照" : "接口未返回状态字段";
+        HealthyLabelText.Text = snapshot.HasHealthData ? "正常" : "正常";
+        AttentionLabelText.Text = snapshot.HasHealthData ? "需要关注" : "需关注";
+        UnknownLabelText.Text = snapshot.HasHealthData ? "状态未知" : "无状态字段";
         _distribution.Clear();
         foreach (var item in snapshot.TypeDistribution) _distribution.Add(item);
     }
@@ -175,6 +239,13 @@ public partial class VisualResourceWorkspace : UserControl
         ShowDrawer(item);
     }
 
+    private void ResourceGrid_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is not DependencyObject source) return;
+        var row = FindVisualParent<DataGridRow>(source);
+        if (row?.Item is OfficialResourceItem item) ShowDrawer(item);
+    }
+
     private void ShowDrawer(OfficialResourceItem item)
     {
         _selectedItem = item;
@@ -186,7 +257,23 @@ public partial class VisualResourceWorkspace : UserControl
         DrawerStateDot.Fill = stateBrush;
         DrawerSubtitleText.Text = $"{item.Type} · {item.Address}";
         DrawerFieldsList.ItemsSource = item.Fields;
-        OpenDetailsButton.IsEnabled = FindDetailOperation() is not null;
+        _contextOperations.Clear();
+        var itemOperations = OfficialResourceInteractionService.FindItemOperations(
+            ResourceTabList.SelectedItem as OfficialApiOperation,
+            _moduleOperations);
+        var detailOperation = OfficialResourceInteractionService.FindDetailOperation(
+            ResourceTabList.SelectedItem as OfficialApiOperation,
+            _moduleOperations);
+        foreach (var operation in itemOperations.Where(operation => operation != detailOperation))
+            _contextOperations.Add(operation);
+        OpenDetailsButton.IsEnabled = detailOperation is not null;
+        OpenDetailsButton.Visibility = detailOperation is null ? Visibility.Collapsed : Visibility.Visible;
+        DrawerActionsTitleText.Visibility = _contextOperations.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        DrawerActionsList.Visibility = _contextOperations.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        var hasWrite = itemOperations.Any(operation => operation.IsWrite);
+        DrawerCapabilityText.Text = hasWrite
+            ? "写操作使用官方 API，并在执行前要求再次确认。"
+            : "官方 API 对此资源仅提供查询能力。";
         DrawerLayer.Visibility = Visibility.Visible;
     }
 
@@ -202,7 +289,7 @@ public partial class VisualResourceWorkspace : UserControl
     private async void RunOperationButton_Click(object sender, RoutedEventArgs e)
     {
         if (OperationComboBox.SelectedItem is OfficialApiOperation operation)
-            await ExecuteOperationAsync(operation, _selectedItem);
+            await ExecuteOperationAsync(operation, null);
     }
 
     private async void OpenDetailsButton_Click(object sender, RoutedEventArgs e)
@@ -211,14 +298,36 @@ public partial class VisualResourceWorkspace : UserControl
         if (operation is not null) await ExecuteOperationAsync(operation, _selectedItem);
     }
 
-    private OfficialApiOperation? FindDetailOperation() => OfficialApiCatalog.ForModule(_moduleId)
-        .FirstOrDefault(operation => operation.Method == "GET" && operation.PathParameters.Count > 0
-            && (operation.Id.Contains("Details", StringComparison.OrdinalIgnoreCase)
-                || operation.Id.StartsWith("get", StringComparison.OrdinalIgnoreCase)));
+    private async void DrawerActionButton_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is OfficialApiOperation operation)
+            await ExecuteOperationAsync(operation, _selectedItem);
+    }
+
+    private OfficialApiOperation? FindDetailOperation() => OfficialResourceInteractionService.FindDetailOperation(
+        ResourceTabList.SelectedItem as OfficialApiOperation,
+        _moduleOperations);
 
     private async Task ExecuteOperationAsync(OfficialApiOperation operation, OfficialResourceItem? selectedItem)
     {
         if (_client is null) return;
+        if (operation.Method == "PUT" && selectedItem is not null)
+        {
+            try
+            {
+                selectedItem = await LoadFreshDetailsForEditAsync(selectedItem);
+            }
+            catch (Exception ex)
+            {
+                StatusChanged?.Invoke(this, $"无法读取最新配置：{ex.Message}");
+                MessageBox.Show(Window.GetWindow(this),
+                    $"为避免用不完整数据覆盖配置，更新前必须先读取完整详情。\n\n{ex.Message}",
+                    operation.Title,
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+                return;
+            }
+        }
         OfficialOperationRequest? request;
         if (CanResolveDirectly(operation, selectedItem))
         {
@@ -303,6 +412,45 @@ public partial class VisualResourceWorkspace : UserControl
             if (separator >= 0) result[part[..separator]] = part[(separator + 1)..];
         }
         return result;
+    }
+
+    private async Task<OfficialResourceItem> LoadFreshDetailsForEditAsync(OfficialResourceItem selectedItem)
+    {
+        var detailOperation = FindDetailOperation()
+            ?? throw new InvalidOperationException("官方 API 未提供该资源的详情端点。");
+        if (!CanResolveDirectly(detailOperation, selectedItem))
+            throw new InvalidOperationException("无法自动解析该资源的详情参数。");
+
+        var values = detailOperation.PathParameters.ToDictionary(
+            parameter => parameter,
+            _ => selectedItem.Id,
+            StringComparer.OrdinalIgnoreCase);
+        SetLoading(true, "正在读取最新完整配置…");
+        try
+        {
+            var path = detailOperation.ResolvePath(_client!.SiteId, values);
+            var response = await _client.ExecuteOfficialApiAsync("GET", path);
+            return OfficialResourcePresentationService.ParseSingle(response, _moduleId);
+        }
+        finally
+        {
+            SetLoading(false, "");
+        }
+    }
+
+    private static string AppendQuery(string path, string query)
+    {
+        var normalized = query.Trim().TrimStart('?');
+        return string.IsNullOrWhiteSpace(normalized) ? path : $"{path}?{normalized}";
+    }
+
+    private static T? FindVisualParent<T>(DependencyObject source) where T : DependencyObject
+    {
+        for (var current = source; current is not null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (current is T match) return match;
+        }
+        return null;
     }
 
     private static string GlyphForModule(string moduleId) => moduleId switch

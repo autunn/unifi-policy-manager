@@ -68,7 +68,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void NavigationRadio_Checked(object sender, RoutedEventArgs e)
+    private void NavigationRadio_Click(object sender, RoutedEventArgs e)
     {
         if (!_uiReady || (sender as FrameworkElement)?.Tag is not string page) return;
         NavigateTo(page);
