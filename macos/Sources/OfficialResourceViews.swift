@@ -52,9 +52,14 @@ enum OfficialResourcePresenter {
         let hasExplicitState = items.contains { $0.state != "未知" }
         let healthy = hasExplicitState ? items.filter(\.isHealthy).count : items.count
         let attention = items.filter(\.needsAttention).count
-        let grouped = Dictionary(grouping: items, by: \.type)
-            .map { (label: $0.key.isEmpty ? "其他" : $0.key, count: $0.value.count) }
-            .sorted { $0.count == $1.count ? $0.label.localizedCaseInsensitiveCompare($1.label) == .orderedAscending : $0.count > $1.count }
+        let resourcesByType = Dictionary(grouping: items) { item in item.type }
+        var grouped: [(label: String, count: Int)] = resourcesByType.map { key, value in
+            (label: key.isEmpty ? "其他" : key, count: value.count)
+        }
+        grouped.sort { lhs, rhs in
+            if lhs.count != rhs.count { return lhs.count > rhs.count }
+            return lhs.label.localizedCaseInsensitiveCompare(rhs.label) == .orderedAscending
+        }
         let distributions = grouped.prefix(6).map {
             OfficialResourceDistribution(label: $0.label, count: $0.count, percentage: items.isEmpty ? 0 : Double($0.count) / Double(items.count))
         }
