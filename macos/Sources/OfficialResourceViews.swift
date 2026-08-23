@@ -689,7 +689,15 @@ private struct OfficialOperationFormView: View {
         switch field.kind {
         case "Bool": guard let value = Bool(field.value) else { throw UniFiError.api("“\(field.label)”只能填写 true 或 false。") }; return value
         case "Number": guard let value = Double(field.value) else { throw UniFiError.api("“\(field.label)”必须是数字。") }; return value
-        case "Array": return field.value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        case "Array":
+            let tokens = field.value.split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            return tokens.map { token -> Any in
+                if let boolean = Bool(token) { return boolean }
+                if let number = Double(token) { return number }
+                return token
+            }
         default: return field.value
         }
     }
