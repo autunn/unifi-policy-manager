@@ -11,13 +11,15 @@ public partial class RecordEditorWindow : Window
     private bool _initialized;
     public DnsRecord? Result { get; private set; }
 
-    public RecordEditorWindow(DnsRecord? record = null)
+    public RecordEditorWindow(DnsRecord? record = null, string initialType = "NS")
     {
         InitializeComponent();
         _original = record?.Clone();
         HeadingText.Text = record is null ? "新增 DNS 记录" : "编辑 DNS 记录";
         Title = HeadingText.Text;
-        var type = record?.RecordType ?? "NS";
+        var requestedType = initialType.Trim().ToUpperInvariant();
+        if (!DnsTypes.All.Contains(requestedType)) requestedType = "NS";
+        var type = record?.RecordType ?? requestedType;
         TypeComboBox.SelectedItem = TypeComboBox.Items.Cast<ComboBoxItem>().First(item => Equals(item.Tag, type));
         TypeComboBox.IsEnabled = record is null;
         if (record is not null) Populate(record);

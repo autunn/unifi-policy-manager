@@ -44,7 +44,7 @@ struct DNSBatchPanel: View {
                         .font(.caption).foregroundStyle(.secondary)
                     Spacer()
                     Button("选择当前转发域") {
-                        selectedForwardIDs.formUnion(model.filteredDNS.filter(\.isForwardDomain).map(\.stableID))
+                        selectedForwardIDs.formUnion(model.dnsRecords.filter(\.isForwardDomain).map(\.stableID))
                     }
                     Button("清除选择") { selectedForwardIDs.removeAll() }
                 }
